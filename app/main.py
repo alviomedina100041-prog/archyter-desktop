@@ -4,16 +4,44 @@ import os
 import sys
 from pathlib import Path
 
-# Archyter targets old Intel laptops too. QtWebEngine/Chromium may otherwise
-# try Vulkan and VA-API paths that are noisy or unstable on Haswell.
-if os.environ.get("ARCHYTER_HW_ACCEL", "0") != "1":
+
+def configure_safe_graphics() -> None:
+    """Force a conservative rendering path for older Intel/Haswell systems."""
+    if os.environ.get("ARCHYTER_HW_ACCEL", "0") == "1":
+        return
+
+    # Qt/Qt Quick: software rendering.
+    os.environ.setdefault("QT_OPENGL", "software")
+    os.environ.setdefault("QT_QUICK_BACKEND", "software")
+    os.environ.setdefault("QSG_RHI_BACKEND", "software")
+
+    # Mesa/OpenGL: avoid touching the old Intel GPU for Archyter itself.
+    os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
+
+    # Haswell is <= Gen 7.5. On Arch, VA-API should use i965 rather than iHD.
+    os.environ.setdefault("LIBVA_DRIVER_NAME", "i965")
+
+    # Chromium/QtWebEngine: do not start Vulkan, GPU compositing or VA-API.
     current_flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
-    safe_flags = (
-        "--disable-gpu "
-        "--disable-vulkan "
-        "--disable-features=VaapiVideoDecoder,VaapiVideoEncoder"
+    safe_flags = " ".join(
+        [
+            "--disable-gpu",
+            "--disable-gpu-compositing",
+            "--disable-gpu-rasterization",
+            "--disable-vulkan",
+            "--disable-accelerated-video-decode",
+            "--disable-accelerated-video-encode",
+            "--disable-features=VaapiVideoDecoder,VaapiVideoEncoder,Vulkan",
+            "--use-gl=disabled",
+        ]
     )
-    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"{current_flags} {safe_flags}".strip()
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+        f"{current_flags} {safe_flags}".strip()
+    )
+
+
+# IMPORTANT: these variables must be set before importing any PySide6 module.
+configure_safe_graphics()
 
 from PySide6.QtWidgets import QApplication
 
@@ -35,6 +63,7 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Archyter Desktop")
     app.setOrganizationName("EduardoMedinaLabs")
+    app.setStyle("Fusion")
 
     window = MainWindow(root_dir=resolve_root_dir())
     window.show()
