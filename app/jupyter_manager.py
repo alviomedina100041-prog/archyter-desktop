@@ -433,8 +433,6 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
                 const style = document.createElement('style');
                 style.id = 'archyter-shell-style';
                 style.textContent = `
-                    ${window.__archyterCompactCSS || ''}
-
                     :root {
                         color-scheme: light !important;
 
@@ -639,6 +637,8 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
                     * {
                         scrollbar-color: #cbd5e1 #ffffff;
                     }
+
+                    ${window.__archyterCompactCSS || ''}
                 `;
 
                 document.documentElement.style.colorScheme = 'light';
