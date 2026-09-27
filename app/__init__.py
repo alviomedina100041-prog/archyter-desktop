@@ -1,0 +1,1 @@
+"""Archyter Desktop application package."""
