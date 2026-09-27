@@ -7,18 +7,28 @@ cd "$PROJECT_DIR"
 echo "== Archyter Desktop =="
 echo
 
-echo "[1/4] Dependencias base de Arch Linux"
-sudo pacman -S --needed python python-pip python-virtualenv
+echo "[1/5] Dependencias base de Arch Linux"
+sudo pacman -S --needed \
+  python \
+  python-pip \
+  python-virtualenv \
+  mesa \
+  libva \
+  libva-intel-driver \
+  libva-utils
 
-echo "[2/4] Entorno virtual"
+echo "[2/5] Entorno virtual"
 python -m venv .venv
 source .venv/bin/activate
 
-echo "[3/4] Dependencias Python"
+echo "[3/5] Dependencias Python"
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
-echo "[4/4] Launcher de escritorio"
+echo "[4/5] Permisos del launcher"
+chmod +x scripts/run_archyter.sh
+
+echo "[5/5] Launcher de escritorio"
 mkdir -p "$HOME/.local/share/applications"
 sed "s|__PROJECT_DIR__|$PROJECT_DIR|g" scripts/archyter-desktop.desktop \
   > "$HOME/.local/share/applications/archyter-desktop.desktop"
@@ -30,8 +40,15 @@ fi
 
 echo
 echo "Instalación terminada."
-echo "Ejecuta ahora:"
-echo "  source .venv/bin/activate"
-echo "  python -m app.main"
+echo
+echo "Haswell detectado/compatible:"
+echo "  Archyter fuerza renderizado por software."
+echo "  VA-API usa i965 en lugar de iHD."
+echo
+echo "Para comprobar VA-API:"
+echo "  LIBVA_DRIVER_NAME=i965 vainfo"
+echo
+echo "Ejecuta:"
+echo "  ./scripts/run_archyter.sh"
 echo
 echo "También puedes buscar 'Archyter Desktop' en el menú de aplicaciones."
