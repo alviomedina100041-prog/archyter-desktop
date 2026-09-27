@@ -213,7 +213,7 @@ for _name, _value in list(globals().items()):
         })
     except Exception:
         pass
-print("""" + marker + r"""" + json.dumps(_items))
+print("__ARCHYTER_VARS__" + json.dumps(_items))
 """
 
         request_message = {
