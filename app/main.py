@@ -13,11 +13,6 @@ def configure_safe_graphics() -> None:
     # Qt/Qt Quick: software rendering.
     os.environ.setdefault("QT_OPENGL", "software")
     os.environ.setdefault("QT_QUICK_BACKEND", "software")
-    os.environ.setdefault("QSG_RHI_BACKEND", "software")
-
-    # Mesa/OpenGL: avoid touching the old Intel GPU for Archyter itself.
-    os.environ.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
-
     # Haswell is <= Gen 7.5. On Arch, VA-API should use i965 rather than iHD.
     os.environ.setdefault("LIBVA_DRIVER_NAME", "i965")
 
@@ -33,6 +28,7 @@ def configure_safe_graphics() -> None:
             "--disable-accelerated-video-encode",
             "--disable-features=VaapiVideoDecoder,VaapiVideoEncoder,Vulkan",
             "--use-gl=disabled",
+            "--log-level=3",
         ]
     )
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
