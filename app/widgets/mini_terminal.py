@@ -1,5 +1,18 @@
-from PySide6.QtCore import QProcess
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QVBoxLayout
+import re
+
+from PySide6.QtCore import QProcess, QProcessEnvironment
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+)
+
+
+ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 class MiniTerminalPanel(QFrame):
@@ -10,7 +23,14 @@ class MiniTerminalPanel(QFrame):
         self.process = QProcess(self)
         self.process.setWorkingDirectory(working_directory)
         self.process.setProgram("/bin/bash")
-        self.process.setArguments(["-i"])
+        self.process.setArguments(["--noprofile", "--norc", "-i"])
+
+        env = QProcessEnvironment.systemEnvironment()
+        env.insert("TERM", "dumb")
+        env.insert("NO_COLOR", "1")
+        env.insert("PS1", "$ ")
+        self.process.setProcessEnvironment(env)
+
         self.process.readyReadStandardOutput.connect(self._read_stdout)
         self.process.readyReadStandardError.connect(self._read_stderr)
         self.process.start()
@@ -24,12 +44,15 @@ class MiniTerminalPanel(QFrame):
         layout.addWidget(title)
 
         self.output = QPlainTextEdit()
+        self.output.setObjectName("TerminalOutput")
         self.output.setReadOnly(True)
+        self.output.setMaximumBlockCount(500)
         layout.addWidget(self.output, 1)
 
         bottom = QHBoxLayout()
+
         self.input = QLineEdit()
-        self.input.setPlaceholderText("Escribe un comando y presiona Enter...")
+        self.input.setPlaceholderText("Comando…")
         self.input.returnPressed.connect(self.run_current_command)
 
         run_btn = QPushButton("Ejecutar")
@@ -39,20 +62,27 @@ class MiniTerminalPanel(QFrame):
         bottom.addWidget(run_btn)
         layout.addLayout(bottom)
 
+    def _clean(self, text: str) -> str:
+        return ANSI_RE.sub("", text).replace("\r", "")
+
+    def _append(self, text: str) -> None:
+        cleaned = self._clean(text).strip("\n")
+        if cleaned:
+            self.output.appendPlainText(cleaned)
+
     def _read_stdout(self) -> None:
         data = self.process.readAllStandardOutput().data().decode(errors="ignore")
-        if data:
-            self.output.appendPlainText(data.rstrip())
+        self._append(data)
 
     def _read_stderr(self) -> None:
         data = self.process.readAllStandardError().data().decode(errors="ignore")
-        if data:
-            self.output.appendPlainText(data.rstrip())
+        self._append(data)
 
     def run_current_command(self) -> None:
         command = self.input.text().strip()
         if not command:
             return
+
         self.output.appendPlainText(f"$ {command}")
         self.process.write((command + "\n").encode())
         self.input.clear()
