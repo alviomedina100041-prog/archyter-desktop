@@ -4,7 +4,7 @@
 
 La idea es conservar la lógica real de Jupyter: notebooks `.ipynb`, kernels, celdas, Markdown, pandas, matplotlib y extensiones siguen siendo Jupyter. Lo que cambia es la experiencia visual: ya no necesitas trabajar en una ventana normal de Firefox o Chrome.
 
-![Archyter Desktop](assets/mockup.png)
+![Archyter Desktop](assets/mockup.svg)
 
 ## Características
 
@@ -66,7 +66,7 @@ archyter-desktop/
 │       └── variables_panel.py
 ├── assets/
 │   ├── icon.svg
-│   └── mockup.png
+│   └── mockup.svg
 ├── scripts/
 │   ├── install_arch.sh
 │   └── archyter-desktop.desktop
