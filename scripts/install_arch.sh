@@ -35,6 +35,7 @@ cp "$SOURCE_DIR/README.md" "$STAGING_DIR/" 2>/dev/null || true
 
 chmod +x "$STAGING_DIR/scripts/run_archyter.sh"
 chmod +x "$STAGING_DIR/scripts/install_arch.sh"
+chmod +x "$STAGING_DIR/scripts/uninstall_arch.sh"
 
 echo "[3/6] Creando entorno privado"
 python -m venv "$STAGING_DIR/.venv"
