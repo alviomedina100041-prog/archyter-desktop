@@ -1,11 +1,13 @@
 [Desktop Entry]
+Version=1.0
 Type=Application
 Name=Archyter Desktop
 GenericName=Jupyter Desktop
 Comment=JupyterLab de escritorio para Arch Linux
-Exec=__PROJECT_DIR__/scripts/run_archyter.sh %f
+Exec=__PROJECT_DIR__/scripts/run_archyter.sh
+TryExec=__PROJECT_DIR__/scripts/run_archyter.sh
 Icon=__PROJECT_DIR__/assets/icon.svg
 Terminal=false
 Categories=Development;Science;IDE;
 StartupNotify=true
-MimeType=application/x-ipynb+json;
+StartupWMClass=Archyter Desktop
