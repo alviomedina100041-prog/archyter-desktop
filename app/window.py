@@ -9,14 +9,18 @@ from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QSplitter,
+    QTableWidget,
+    QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
@@ -71,6 +75,7 @@ class MainWindow(QMainWindow):
         self.app_start_time = time.time()
         self.active_kernel_id: str | None = None
         self.active_kernel_name: str = ""
+        self._popout_dialogs: list[QDialog] = []
 
         self._build_ui()
         self.setStyleSheet(APP_STYLE)
@@ -233,8 +238,13 @@ class MainWindow(QMainWindow):
 
         self.variables_panel = VariablesPanel()
         self.variables_panel.refresh_requested.connect(self._refresh_variables)
+        self.variables_panel.expand_requested.connect(self._show_variables_dialog)
+
         self.log_panel = LogConsolePanel()
+        self.log_panel.expand_requested.connect(self._show_logs_dialog)
+
         self.terminal_panel = MiniTerminalPanel(self.root_dir)
+        self.terminal_panel.expand_requested.connect(self._show_terminal_dialog)
 
         if self.compact_mode:
             self.kernel_panel.setMinimumHeight(100)
@@ -389,6 +399,113 @@ class MainWindow(QMainWindow):
             self._append_log(f"Variables: {exc}")
         finally:
             self.variables_panel.set_refreshing(False)
+
+    def _register_popout(self, dialog: QDialog) -> None:
+        self._popout_dialogs.append(dialog)
+
+        def cleanup(*_args) -> None:
+            if dialog in self._popout_dialogs:
+                self._popout_dialogs.remove(dialog)
+
+        dialog.destroyed.connect(cleanup)
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def _prepare_popout(self, title: str) -> QDialog:
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setAttribute(Qt.WA_DeleteOnClose, True)
+        dialog.setStyleSheet(APP_STYLE)
+
+        screen = QApplication.primaryScreen()
+        available = screen.availableGeometry() if screen else None
+
+        if available:
+            width = min(980, max(720, int(available.width() * 0.72)))
+            height = min(620, max(480, int(available.height() * 0.72)))
+            dialog.resize(width, height)
+        else:
+            dialog.resize(900, 580)
+
+        return dialog
+
+    def _show_variables_dialog(self) -> None:
+        dialog = self._prepare_popout("Archyter — Variables")
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        header = QHBoxLayout()
+        title = QLabel("Variables del kernel")
+        title.setObjectName("TitleLabel")
+
+        refresh = QPushButton("↻ Actualizar")
+        refresh.setObjectName("PrimaryButton")
+
+        header.addWidget(title)
+        header.addStretch(1)
+        header.addWidget(refresh)
+        layout.addLayout(header)
+
+        table = QTableWidget(0, 4)
+        table.setHorizontalHeaderLabels(["Nombre", "Tipo", "Forma", "Valor"])
+        table.horizontalHeader().setStretchLastSection(True)
+        table.verticalHeader().setVisible(False)
+        layout.addWidget(table, 1)
+
+        def populate() -> None:
+            table.setRowCount(0)
+            for item in self.variables_panel.variables:
+                row = table.rowCount()
+                table.insertRow(row)
+                table.setItem(row, 0, QTableWidgetItem(str(item.get("name", ""))))
+                table.setItem(row, 1, QTableWidgetItem(str(item.get("type", ""))))
+                table.setItem(row, 2, QTableWidgetItem(str(item.get("shape", ""))))
+                table.setItem(row, 3, QTableWidgetItem(str(item.get("value", ""))))
+
+        def refresh_all() -> None:
+            refresh.setEnabled(False)
+            refresh.setText("Actualizando…")
+            QApplication.processEvents()
+            self._refresh_variables()
+            populate()
+            refresh.setText("↻ Actualizar")
+            refresh.setEnabled(True)
+
+        refresh.clicked.connect(refresh_all)
+        populate()
+        self._register_popout(dialog)
+
+    def _show_logs_dialog(self) -> None:
+        dialog = self._prepare_popout("Archyter — Consola / logs")
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
+
+        title = QLabel("Consola del kernel / logs")
+        title.setObjectName("TitleLabel")
+        layout.addWidget(title)
+
+        console = QPlainTextEdit()
+        console.setReadOnly(True)
+        console.setPlainText(self.log_panel.all_text())
+        console.moveCursor(console.textCursor().MoveOperation.End)
+        layout.addWidget(console, 1)
+
+        self._register_popout(dialog)
+
+    def _show_terminal_dialog(self) -> None:
+        dialog = self._prepare_popout("Archyter — Terminal")
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        terminal = MiniTerminalPanel(self.root_dir)
+        if hasattr(terminal, "title_button"):
+            terminal.title_button.hide()
+
+        layout.addWidget(terminal, 1)
+        self._register_popout(dialog)
 
     def _go_home(self) -> None:
         self.browser.setUrl(QUrl(self.manager.open_url_for_path()))
