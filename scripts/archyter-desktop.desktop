@@ -2,9 +2,10 @@
 Type=Application
 Name=Archyter Desktop
 GenericName=Jupyter Desktop
-Comment=JupyterLab integrado en una aplicación de escritorio para Arch Linux
-Exec=bash -lc 'cd "__PROJECT_DIR__" && source .venv/bin/activate && python -m app.main "$HOME"'
+Comment=JupyterLab de escritorio para Arch Linux
+Exec=__PROJECT_DIR__/scripts/run_archyter.sh %f
 Icon=__PROJECT_DIR__/assets/icon.svg
 Terminal=false
 Categories=Development;Science;IDE;
 StartupNotify=true
+MimeType=application/x-ipynb+json;
