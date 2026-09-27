@@ -62,7 +62,10 @@ class MainWindow(QMainWindow):
         splitter.addWidget(self._create_left_sidebar())
         splitter.addWidget(self._create_center_browser())
         splitter.addWidget(self._create_right_sidebar())
-        splitter.setSizes([280, 1000, 340])
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setStretchFactor(2, 0)
+        splitter.setSizes([270, 1040, 320])
 
         root_layout.addWidget(splitter, 1)
         root_layout.addWidget(self._create_status_bar())
@@ -120,7 +123,8 @@ class MainWindow(QMainWindow):
 
     def _create_left_sidebar(self) -> QWidget:
         self.file_explorer = FileExplorerPanel(self.root_dir)
-        self.file_explorer.setMinimumWidth(240)
+        self.file_explorer.setMinimumWidth(235)
+        self.file_explorer.setMaximumWidth(330)
         self.file_explorer.file_open_requested.connect(self._open_path)
         return self.file_explorer
 
@@ -132,6 +136,8 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(8, 8, 8, 8)
 
         self.browser = QWebEngineView()
+        self.browser.setZoomFactor(1.0)
+        self.browser.setStyleSheet("background: #0b1220; border: none;")
         self.browser.loadFinished.connect(self._on_page_loaded)
         layout.addWidget(self.browser, 1)
 
@@ -140,6 +146,8 @@ class MainWindow(QMainWindow):
     def _create_right_sidebar(self) -> QWidget:
         frame = QFrame()
         frame.setObjectName("RightSidebar")
+        frame.setMinimumWidth(290)
+        frame.setMaximumWidth(370)
 
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -192,8 +200,17 @@ class MainWindow(QMainWindow):
         self.refresh_timer.start(4000)
 
     def _on_page_loaded(self, ok: bool) -> None:
-        if ok:
-            self.manager.inject_shortcuts(self.browser.page())
+        if not ok:
+            return
+
+        self.manager.inject_shortcuts(self.browser.page())
+
+        QTimer.singleShot(
+            700,
+            lambda: self.browser.page().runJavaScript(
+                "window.__archyter && window.__archyter.refit && window.__archyter.refit();"
+            ),
+        )
 
     def _append_log(self, text: str) -> None:
         self.log_panel.append_line(text)
@@ -227,10 +244,20 @@ class MainWindow(QMainWindow):
             uptime_seconds = int(time.time() - self.app_start_time)
             uptime_text = f"{uptime_seconds // 60} min {uptime_seconds % 60}s"
 
+            display_kernel = kernel_name
+            if "julia" in kernel_name.lower():
+                display_kernel = kernel_name
+            elif "python" in kernel_name.lower():
+                display_kernel = f"{kernel_name} (ipykernel)"
+
             self.kernel_panel.update_info(
-                f"{kernel_name} (ipykernel)",
+                display_kernel,
                 execution_state,
                 uptime_text,
+            )
+
+            self.right_status.setText(
+                f"{kernel_name} | Kernel conectado | UTF-8 | Archyter Desktop"
             )
 
             self.left_status.setText(
@@ -239,7 +266,11 @@ class MainWindow(QMainWindow):
 
             if kernel_id:
                 try:
-                    variables = self.manager.variable_snapshot(kernel_id, timeout=3.0)
+                    variables = self.manager.variable_snapshot(
+                        kernel_id,
+                        kernel_name=kernel_name,
+                        timeout=3.0,
+                    )
                 except Exception as exc:
                     variables = [
                         {
