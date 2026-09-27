@@ -173,10 +173,16 @@ class JupyterServerManager(QObject):
         data = response.json()
         return os.path.join(self.root_dir, data["path"])
 
-    def variable_snapshot(self, kernel_id: str, timeout: float = 5.0) -> list[dict[str, Any]]:
-        marker = "__ARCHYTER_VARS__"
+    def variable_snapshot(
+        self,
+        kernel_id: str,
+        kernel_name: str = "",
+        timeout: float = 5.0,
+    ) -> list[dict[str, Any]]:
+        """Read a lightweight variable snapshot from Python or Julia kernels."""
         session_id = uuid.uuid4().hex
         msg_id = uuid.uuid4().hex
+        normalized_name = kernel_name.lower()
 
         assert self.server_info is not None
         ws_url = (
@@ -185,7 +191,49 @@ class JupyterServerManager(QObject):
             f"?token={self.token}&session_id={session_id}"
         )
 
-        code = r"""
+        if "julia" in normalized_name:
+            marker = "__ARCHYTER_VAR__"
+            mode = "julia"
+            code = r"""
+for _name in names(Main; all=false, imported=false)
+    _label = String(_name)
+    if startswith(_label, "#") || _label in ("ans",)
+        continue
+    end
+
+    try
+        _value = getfield(Main, _name)
+        _type = string(typeof(_value))
+
+        if _value isa AbstractArray
+            _shape = string(size(_value))
+        elseif _value isa AbstractDict || _value isa AbstractString
+            _shape = "len=" * string(length(_value))
+        else
+            _shape = "-"
+        end
+
+        _preview = sprint(show, _value)
+        _preview = replace(_preview, '\n' => ' ', '\t' => ' ')
+        if length(_preview) > 80
+            _preview = first(_preview, 77) * "..."
+        end
+
+        println(
+            "__ARCHYTER_VAR__",
+            _label, "\t",
+            _type, "\t",
+            _shape, "\t",
+            _preview,
+        )
+    catch
+    end
+end
+"""
+        else:
+            marker = "__ARCHYTER_VARS__"
+            mode = "python"
+            code = r"""
 import json
 _skip = {"In", "Out", "exit", "quit", "get_ipython"}
 _items = []
@@ -239,7 +287,11 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
             "buffers": [],
         }
 
-        ws = websocket.create_connection(ws_url, timeout=timeout, origin=self.base_url)
+        ws = websocket.create_connection(
+            ws_url,
+            timeout=timeout,
+            origin=self.base_url,
+        )
         ws.send(json.dumps(request_message))
 
         deadline = time.time() + timeout
@@ -252,14 +304,37 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
                 if parent.get("msg_id") != msg_id:
                     continue
 
-                msg_type = payload.get("msg_type") or payload.get("header", {}).get("msg_type")
+                msg_type = (
+                    payload.get("msg_type")
+                    or payload.get("header", {}).get("msg_type")
+                )
                 content = payload.get("content", {}) or {}
 
                 if msg_type == "stream":
                     output = content.get("text", "")
-                    if marker in output:
+
+                    if mode == "python" and marker in output:
                         serialized = output.split(marker, 1)[1].strip()
                         collected = json.loads(serialized)
+                        break
+
+                    if mode == "julia":
+                        for line in output.splitlines():
+                            if not line.startswith(marker):
+                                continue
+                            fields = line[len(marker):].split("\t", 3)
+                            if len(fields) == 4:
+                                collected.append(
+                                    {
+                                        "name": fields[0],
+                                        "type": fields[1],
+                                        "shape": fields[2],
+                                        "value": fields[3],
+                                    }
+                                )
+
+                if msg_type == "status" and content.get("execution_state") == "idle":
+                    if mode == "julia":
                         break
 
                 if msg_type == "error":
@@ -280,18 +355,32 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
                 style.id = 'archyter-shell-style';
                 style.textContent = `
                     :root {
-                        --jp-layout-color0: #0d1117 !important;
-                        --jp-layout-color1: #111827 !important;
-                        --jp-layout-color2: #172033 !important;
-                        --jp-layout-color3: #1f2937 !important;
+                        --jp-layout-color0: #0b1220 !important;
+                        --jp-layout-color1: #0f172a !important;
+                        --jp-layout-color2: #111c2d !important;
+                        --jp-layout-color3: #1e293b !important;
                         --jp-layout-color4: #334155 !important;
-                        --jp-content-font-color0: #e6edf3 !important;
+                        --jp-content-font-color0: #f1f5f9 !important;
                         --jp-content-font-color1: #cbd5e1 !important;
                         --jp-content-font-color2: #94a3b8 !important;
-                        --jp-brand-color1: #0ea5e9 !important;
+                        --jp-brand-color1: #2596ff !important;
                         --jp-brand-color2: #38bdf8 !important;
-                        --jp-cell-editor-background: #111827 !important;
-                        --jp-cell-editor-border-color: #273449 !important;
+                        --jp-cell-editor-background: #101a2a !important;
+                        --jp-cell-editor-border-color: #2a3a52 !important;
+                    }
+
+                    html,
+                    body,
+                    #main,
+                    .jp-LabShell {
+                        width: 100% !important;
+                        height: 100% !important;
+                        min-width: 0 !important;
+                        min-height: 0 !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                        overflow: hidden !important;
+                        background: #0b1220 !important;
                     }
 
                     #jp-top-panel,
@@ -300,32 +389,89 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
                     .jp-SideBar,
                     .jp-StatusBar {
                         display: none !important;
+                        width: 0 !important;
+                        height: 0 !important;
+                        min-width: 0 !important;
+                        min-height: 0 !important;
                     }
 
+                    #jp-main-content-panel,
                     #jp-main-dock-panel {
+                        position: absolute !important;
+                        inset: 0 !important;
                         left: 0 !important;
                         right: 0 !important;
                         top: 0 !important;
                         bottom: 0 !important;
+                        width: 100% !important;
+                        height: 100% !important;
+                        min-width: 0 !important;
+                        min-height: 0 !important;
+                        max-width: none !important;
+                        max-height: none !important;
+                        transform: none !important;
                     }
 
-                    .jp-LabShell,
+                    #jp-main-dock-panel > .lm-DockPanel-widget,
                     .jp-MainAreaWidget,
                     .jp-NotebookPanel,
+                    .jp-NotebookPanel-notebook,
                     .jp-Notebook {
-                        background: #0d1117 !important;
+                        width: 100% !important;
+                        max-width: none !important;
+                        min-width: 0 !important;
+                        background: #0b1220 !important;
+                    }
+
+                    .jp-NotebookPanel {
+                        height: 100% !important;
+                    }
+
+                    .jp-Notebook {
+                        padding: 12px 16px 80px 16px !important;
                     }
 
                     .jp-Notebook-cell {
-                        border-radius: 8px !important;
+                        border-radius: 10px !important;
+                        margin: 8px 0 !important;
                     }
 
-                    .jp-NotebookPanel-toolbar {
-                        background: #111827 !important;
-                        border-bottom: 1px solid #1f2937 !important;
+                    .jp-NotebookPanel-toolbar,
+                    .lm-TabBar {
+                        background: #0f172a !important;
+                        border-color: #223049 !important;
+                    }
+
+                    .jp-InputArea-editor,
+                    .jp-OutputArea-output {
+                        border-radius: 8px !important;
                     }
                 `;
+
                 document.head.appendChild(style);
+
+                const forceFullLayout = () => {
+                    for (const selector of [
+                        '#jp-main-content-panel',
+                        '#jp-main-dock-panel'
+                    ]) {
+                        const node = document.querySelector(selector);
+                        if (!node) continue;
+                        node.style.setProperty('left', '0', 'important');
+                        node.style.setProperty('right', '0', 'important');
+                        node.style.setProperty('top', '0', 'important');
+                        node.style.setProperty('bottom', '0', 'important');
+                        node.style.setProperty('width', '100%', 'important');
+                        node.style.setProperty('height', '100%', 'important');
+                        node.style.setProperty('transform', 'none', 'important');
+                    }
+                    window.dispatchEvent(new Event('resize'));
+                };
+
+                forceFullLayout();
+                requestAnimationFrame(forceFullLayout);
+                setTimeout(forceFullLayout, 250);
+                setTimeout(forceFullLayout, 1000);
 
                 function sendKey(key, code, extra = {}) {
                     const target =
@@ -352,6 +498,9 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
                         const notebook = document.querySelector('.jp-Notebook');
                         if (notebook) notebook.focus();
                         sendKey('Enter', 'Enter', {shiftKey: true});
+                    },
+                    refit() {
+                        forceFullLayout();
                     }
                 };
             })();
