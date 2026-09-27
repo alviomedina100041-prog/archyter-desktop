@@ -7,6 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import QTimer, Qt, QUrl
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
+    QApplication,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -34,8 +35,26 @@ class MainWindow(QMainWindow):
 
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
         self.setWindowTitle("Archyter Desktop")
-        self.resize(1600, 940)
-        self.setMinimumSize(1100, 700)
+
+        screen = QApplication.primaryScreen()
+        available = screen.availableGeometry() if screen else None
+        self.compact_mode = bool(
+            available
+            and (
+                available.width() <= 1400
+                or available.height() <= 820
+            )
+        )
+
+        if self.compact_mode and available:
+            self.resize(
+                min(available.width(), 1366),
+                min(available.height(), 780),
+            )
+            self.setMinimumSize(960, 620)
+        else:
+            self.resize(1600, 940)
+            self.setMinimumSize(1100, 700)
 
         self.manager = JupyterServerManager(root_dir=self.root_dir)
         self.manager.log_line.connect(self._append_log)
@@ -52,22 +71,34 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         central = QWidget()
         root_layout = QVBoxLayout(central)
-        root_layout.setContentsMargins(16, 16, 16, 16)
-        root_layout.setSpacing(12)
+
+        if self.compact_mode:
+            root_layout.setContentsMargins(7, 7, 7, 7)
+            root_layout.setSpacing(6)
+        else:
+            root_layout.setContentsMargins(16, 16, 16, 16)
+            root_layout.setSpacing(12)
 
         root_layout.addWidget(self._create_top_bar())
 
-        splitter = QSplitter(Qt.Horizontal)
-        splitter.setChildrenCollapsible(False)
-        splitter.addWidget(self._create_left_sidebar())
-        splitter.addWidget(self._create_center_browser())
-        splitter.addWidget(self._create_right_sidebar())
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
-        splitter.setStretchFactor(2, 0)
-        splitter.setSizes([270, 1040, 320])
+        self.main_splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter.setChildrenCollapsible(False)
+        self.main_splitter.setHandleWidth(3 if self.compact_mode else 5)
 
-        root_layout.addWidget(splitter, 1)
+        self.main_splitter.addWidget(self._create_left_sidebar())
+        self.main_splitter.addWidget(self._create_center_browser())
+        self.main_splitter.addWidget(self._create_right_sidebar())
+
+        self.main_splitter.setStretchFactor(0, 0)
+        self.main_splitter.setStretchFactor(1, 1)
+        self.main_splitter.setStretchFactor(2, 0)
+
+        if self.compact_mode:
+            self.main_splitter.setSizes([215, 845, 275])
+        else:
+            self.main_splitter.setSizes([270, 1040, 320])
+
+        root_layout.addWidget(self.main_splitter, 1)
         root_layout.addWidget(self._create_status_bar())
 
         self.setCentralWidget(central)
@@ -75,13 +106,20 @@ class MainWindow(QMainWindow):
     def _create_top_bar(self) -> QWidget:
         frame = QFrame()
         frame.setObjectName("TopBar")
+        frame.setFixedHeight(52 if self.compact_mode else 66)
 
         layout = QHBoxLayout(frame)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(10)
+
+        if self.compact_mode:
+            layout.setContentsMargins(10, 6, 10, 6)
+            layout.setSpacing(6)
+        else:
+            layout.setContentsMargins(16, 12, 16, 12)
+            layout.setSpacing(10)
 
         back_btn = QPushButton("←")
-        back_btn.setFixedWidth(42)
+        back_btn.setObjectName("BackButton")
+        back_btn.setFixedWidth(32 if self.compact_mode else 42)
         back_btn.clicked.connect(self._go_home)
         layout.addWidget(back_btn)
 
@@ -109,22 +147,34 @@ class MainWindow(QMainWindow):
         self.settings_button = QPushButton("Ajustes")
         self.settings_button.clicked.connect(self._choose_project_root)
 
-        for button in (
+        buttons = (
             self.new_button,
             self.save_button,
             self.run_button,
             self.kernel_button,
             self.terminal_button,
             self.settings_button,
-        ):
+        )
+
+        if self.compact_mode:
+            for button in buttons:
+                button.setFixedHeight(32)
+
+        for button in buttons:
             layout.addWidget(button)
 
         return frame
 
     def _create_left_sidebar(self) -> QWidget:
         self.file_explorer = FileExplorerPanel(self.root_dir)
-        self.file_explorer.setMinimumWidth(235)
-        self.file_explorer.setMaximumWidth(330)
+
+        if self.compact_mode:
+            self.file_explorer.setMinimumWidth(190)
+            self.file_explorer.setMaximumWidth(255)
+        else:
+            self.file_explorer.setMinimumWidth(235)
+            self.file_explorer.setMaximumWidth(330)
+
         self.file_explorer.file_open_requested.connect(self._open_path)
         return self.file_explorer
 
@@ -133,10 +183,15 @@ class MainWindow(QMainWindow):
         frame.setObjectName("CenterFrame")
 
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setContentsMargins(
+            2 if self.compact_mode else 8,
+            2 if self.compact_mode else 8,
+            2 if self.compact_mode else 8,
+            2 if self.compact_mode else 8,
+        )
 
         self.browser = QWebEngineView()
-        self.browser.setZoomFactor(1.0)
+        self.browser.setZoomFactor(0.82 if self.compact_mode else 1.0)
         self.browser.setStyleSheet("background: #ffffff; border: none;")
         self.browser.loadFinished.connect(self._on_page_loaded)
         layout.addWidget(self.browser, 1)
@@ -146,12 +201,22 @@ class MainWindow(QMainWindow):
     def _create_right_sidebar(self) -> QWidget:
         frame = QFrame()
         frame.setObjectName("RightSidebar")
-        frame.setMinimumWidth(290)
-        frame.setMaximumWidth(370)
+
+        if self.compact_mode:
+            frame.setMinimumWidth(250)
+            frame.setMaximumWidth(310)
+        else:
+            frame.setMinimumWidth(290)
+            frame.setMaximumWidth(370)
 
         layout = QVBoxLayout(frame)
-        layout.setContentsMargins(10, 10, 10, 10)
-        layout.setSpacing(10)
+
+        if self.compact_mode:
+            layout.setContentsMargins(6, 6, 6, 6)
+            layout.setSpacing(6)
+        else:
+            layout.setContentsMargins(10, 10, 10, 10)
+            layout.setSpacing(10)
 
         self.kernel_panel = KernelPanel()
         self.kernel_panel.restart_button.clicked.connect(self._restart_active_kernel)
@@ -159,7 +224,20 @@ class MainWindow(QMainWindow):
         self.variables_panel = VariablesPanel()
         self.log_panel = LogConsolePanel()
         self.terminal_panel = MiniTerminalPanel(self.root_dir)
-        self.terminal_panel.setMinimumHeight(210)
+
+        if self.compact_mode:
+            self.kernel_panel.setMinimumHeight(100)
+            self.kernel_panel.setMaximumHeight(125)
+
+            self.variables_panel.setMinimumHeight(145)
+            self.variables_panel.setMaximumHeight(190)
+
+            self.log_panel.setMinimumHeight(105)
+            self.log_panel.setMaximumHeight(145)
+
+            self.terminal_panel.setMinimumHeight(145)
+        else:
+            self.terminal_panel.setMinimumHeight(210)
 
         layout.addWidget(self.kernel_panel)
         layout.addWidget(self.variables_panel, 1)
@@ -171,12 +249,20 @@ class MainWindow(QMainWindow):
     def _create_status_bar(self) -> QWidget:
         frame = QFrame()
         frame.setObjectName("StatusBarFrame")
+        frame.setFixedHeight(30 if self.compact_mode else 40)
 
         layout = QHBoxLayout(frame)
-        layout.setContentsMargins(16, 10, 16, 10)
+
+        if self.compact_mode:
+            layout.setContentsMargins(10, 3, 10, 3)
+            layout.setSpacing(8)
+        else:
+            layout.setContentsMargins(16, 10, 16, 10)
 
         self.left_status = QLabel(f"Proyecto: {Path(self.root_dir).name}")
-        self.right_status = QLabel("Python 3 | Kernel detenido | UTF-8 | Archyter Desktop")
+        self.right_status = QLabel(
+            "Python 3 | Kernel detenido | UTF-8 | Archyter Desktop"
+        )
         self.right_status.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
 
         layout.addWidget(self.left_status)
@@ -203,7 +289,10 @@ class MainWindow(QMainWindow):
         if not ok:
             return
 
-        self.manager.inject_shortcuts(self.browser.page())
+        self.manager.inject_shortcuts(
+            self.browser.page(),
+            compact=self.compact_mode,
+        )
 
         QTimer.singleShot(
             700,
@@ -227,7 +316,7 @@ class MainWindow(QMainWindow):
             if not session:
                 self.active_kernel_id = None
                 self.kernel_panel.update_info(
-                    "Python 3.x (sin sesión)",
+                    "Python 3.x",
                     "sin sesión",
                     "-",
                 )
@@ -242,13 +331,11 @@ class MainWindow(QMainWindow):
             self.active_kernel_id = kernel_id
 
             uptime_seconds = int(time.time() - self.app_start_time)
-            uptime_text = f"{uptime_seconds // 60} min {uptime_seconds % 60}s"
+            uptime_text = f"{uptime_seconds // 60}m {uptime_seconds % 60}s"
 
             display_kernel = kernel_name
-            if "julia" in kernel_name.lower():
+            if "python" in kernel_name.lower():
                 display_kernel = kernel_name
-            elif "python" in kernel_name.lower():
-                display_kernel = f"{kernel_name} (ipykernel)"
 
             self.kernel_panel.update_info(
                 display_kernel,
@@ -257,11 +344,12 @@ class MainWindow(QMainWindow):
             )
 
             self.right_status.setText(
-                f"{kernel_name} | Kernel conectado | UTF-8 | Archyter Desktop"
+                f"{kernel_name} | conectado | UTF-8 | Archyter"
             )
 
+            notebook_name = Path(session.get("path", "-")).name
             self.left_status.setText(
-                f'Proyecto: {Path(self.root_dir).name} | Notebook: {session.get("path", "-")}'
+                f"{Path(self.root_dir).name}  •  {notebook_name}"
             )
 
             if kernel_id:
@@ -277,7 +365,7 @@ class MainWindow(QMainWindow):
                             "name": "info",
                             "type": "estado",
                             "shape": "-",
-                            "value": "Ejecuta una celda para actualizar variables.",
+                            "value": "Ejecuta una celda.",
                         }
                     ]
                     self._append_log(f"Variables: {exc}")
@@ -352,7 +440,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Carpeta de proyecto",
-            "En esta primera versión el cambio de raíz se aplica al reiniciar.\n\n"
+            "En esta versión el cambio de raíz se aplica al reiniciar.\n\n"
             f"Carpeta elegida: {folder}",
         )
 
