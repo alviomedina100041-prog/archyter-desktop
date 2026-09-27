@@ -271,21 +271,90 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
 
     def inject_shortcuts(self, page: Any) -> None:
         page.runJavaScript(
-            """
-            window.__archyter = {
-                save() {
-                    document.dispatchEvent(new KeyboardEvent(
-                        'keydown',
-                        {key:'s', code:'KeyS', ctrlKey:true, bubbles:true}
-                    ));
-                },
-                runCell() {
-                    document.dispatchEvent(new KeyboardEvent(
-                        'keydown',
-                        {key:'Enter', code:'Enter', shiftKey:true, bubbles:true}
-                    ));
+            r"""
+            (() => {
+                const old = document.getElementById('archyter-shell-style');
+                if (old) old.remove();
+
+                const style = document.createElement('style');
+                style.id = 'archyter-shell-style';
+                style.textContent = `
+                    :root {
+                        --jp-layout-color0: #0d1117 !important;
+                        --jp-layout-color1: #111827 !important;
+                        --jp-layout-color2: #172033 !important;
+                        --jp-layout-color3: #1f2937 !important;
+                        --jp-layout-color4: #334155 !important;
+                        --jp-content-font-color0: #e6edf3 !important;
+                        --jp-content-font-color1: #cbd5e1 !important;
+                        --jp-content-font-color2: #94a3b8 !important;
+                        --jp-brand-color1: #0ea5e9 !important;
+                        --jp-brand-color2: #38bdf8 !important;
+                        --jp-cell-editor-background: #111827 !important;
+                        --jp-cell-editor-border-color: #273449 !important;
+                    }
+
+                    #jp-top-panel,
+                    #jp-left-stack,
+                    #jp-right-stack,
+                    .jp-SideBar,
+                    .jp-StatusBar {
+                        display: none !important;
+                    }
+
+                    #jp-main-dock-panel {
+                        left: 0 !important;
+                        right: 0 !important;
+                        top: 0 !important;
+                        bottom: 0 !important;
+                    }
+
+                    .jp-LabShell,
+                    .jp-MainAreaWidget,
+                    .jp-NotebookPanel,
+                    .jp-Notebook {
+                        background: #0d1117 !important;
+                    }
+
+                    .jp-Notebook-cell {
+                        border-radius: 8px !important;
+                    }
+
+                    .jp-NotebookPanel-toolbar {
+                        background: #111827 !important;
+                        border-bottom: 1px solid #1f2937 !important;
+                    }
+                `;
+                document.head.appendChild(style);
+
+                function sendKey(key, code, extra = {}) {
+                    const target =
+                        document.activeElement ||
+                        document.querySelector('.jp-Notebook') ||
+                        document.body;
+
+                    target.dispatchEvent(
+                        new KeyboardEvent('keydown', {
+                            key,
+                            code,
+                            bubbles: true,
+                            cancelable: true,
+                            ...extra
+                        })
+                    );
                 }
-            };
+
+                window.__archyter = {
+                    save() {
+                        sendKey('s', 'KeyS', {ctrlKey: true});
+                    },
+                    runCell() {
+                        const notebook = document.querySelector('.jp-Notebook');
+                        if (notebook) notebook.focus();
+                        sendKey('Enter', 'Enter', {shiftKey: true});
+                    }
+                };
+            })();
             """
         )
 
