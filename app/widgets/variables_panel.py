@@ -2,7 +2,6 @@ from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
-    QLabel,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -12,20 +11,24 @@ from PySide6.QtWidgets import (
 
 class VariablesPanel(QFrame):
     refresh_requested = Signal()
+    expand_requested = Signal()
 
     def __init__(self):
         super().__init__()
         self.setObjectName("PanelCard")
+        self.variables: list[dict] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
 
         header = QHBoxLayout()
-        header.setSpacing(6)
+        header.setSpacing(4)
 
-        title = QLabel("Variables")
-        title.setObjectName("SectionTitle")
+        self.title_button = QPushButton("Variables  ↗")
+        self.title_button.setObjectName("PanelTitleButton")
+        self.title_button.setToolTip("Abrir Variables en una ventana grande")
+        self.title_button.clicked.connect(self.expand_requested.emit)
 
         self.refresh_button = QPushButton("↻")
         self.refresh_button.setToolTip("Actualizar variables")
@@ -33,7 +36,7 @@ class VariablesPanel(QFrame):
         self.refresh_button.setFixedHeight(26)
         self.refresh_button.clicked.connect(self.refresh_requested.emit)
 
-        header.addWidget(title)
+        header.addWidget(self.title_button)
         header.addStretch(1)
         header.addWidget(self.refresh_button)
         layout.addLayout(header)
@@ -47,8 +50,10 @@ class VariablesPanel(QFrame):
         layout.addWidget(self.table)
 
     def set_variables(self, variables: list[dict]) -> None:
+        self.variables = [dict(item) for item in variables]
         self.table.setRowCount(0)
-        for item in variables:
+
+        for item in self.variables:
             row = self.table.rowCount()
             self.table.insertRow(row)
             self.table.setItem(row, 0, QTableWidgetItem(str(item.get("name", ""))))
