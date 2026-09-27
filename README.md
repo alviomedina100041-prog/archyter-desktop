@@ -8,7 +8,7 @@ La idea es conservar la lógica real de Jupyter: notebooks `.ipynb`, kernels, ce
 
 ## Características
 
-- Ventana de escritorio nativa con tema oscuro estilo Arch/KDE.
+- Ventana de escritorio nativa con tema blanco/claro estilo Arch/KDE.
 - JupyterLab embebido sin barra de URL ni controles de navegador.
 - Explorador de archivos lateral.
 - Toolbar con Nuevo, Guardar, Ejecutar, Kernel, Terminal y Ajustes.
@@ -31,7 +31,7 @@ Después:
 
 ```bash
 source .venv/bin/activate
-python -m app.main
+./scripts/run_archyter.sh
 ```
 
 También aparecerá **Archyter Desktop** en el menú de aplicaciones.
@@ -81,3 +81,27 @@ Archyter no crea un formato propietario. Tus notebooks siguen siendo `.ipynb` no
 ## Estado
 
 Primera versión funcional para probar en Arch Linux. A partir de aquí se puede pulir la interfaz con la misma dinámica de desarrollo iterativo usada en otros proyectos.
+
+
+## Intel Haswell / VA-API
+
+Archyter usa por defecto un perfil conservador para GPUs Intel antiguas:
+
+- renderizado Qt por software;
+- Vulkan desactivado para QtWebEngine/Chromium;
+- aceleración de vídeo desactivada dentro de QtWebEngine;
+- `LIBVA_DRIVER_NAME=i965` para Intel Haswell y anteriores.
+
+En Arch Linux, `libva-intel-driver` proporciona `i965_drv_video.so`. El instalador lo añade automáticamente.
+
+Para verificarlo:
+
+```bash
+LIBVA_DRIVER_NAME=i965 vainfo
+```
+
+Si quieres experimentar con aceleración por hardware más adelante:
+
+```bash
+ARCHYTER_HW_ACCEL=1 python -m app.main
+```
