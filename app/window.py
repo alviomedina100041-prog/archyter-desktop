@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QTimer, Qt, QUrl
+from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QApplication,
@@ -27,6 +28,13 @@ from .widgets.kernel_panel import KernelPanel
 from .widgets.log_console import LogConsolePanel
 from .widgets.mini_terminal import MiniTerminalPanel
 from .widgets.variables_panel import VariablesPanel
+
+
+class QuietWebEnginePage(QWebEnginePage):
+    def javaScriptConsoleMessage(self, level, message, line_number, source_id):
+        if "No active debugger session" in message:
+            return
+        super().javaScriptConsoleMessage(level, message, line_number, source_id)
 
 
 class MainWindow(QMainWindow):
@@ -62,6 +70,7 @@ class MainWindow(QMainWindow):
 
         self.app_start_time = time.time()
         self.active_kernel_id: str | None = None
+        self.active_kernel_name: str = ""
 
         self._build_ui()
         self.setStyleSheet(APP_STYLE)
@@ -191,6 +200,7 @@ class MainWindow(QMainWindow):
         )
 
         self.browser = QWebEngineView()
+        self.browser.setPage(QuietWebEnginePage(self.browser))
         self.browser.setZoomFactor(0.82 if self.compact_mode else 1.0)
         self.browser.setStyleSheet("background: #ffffff; border: none;")
         self.browser.loadFinished.connect(self._on_page_loaded)
@@ -222,6 +232,7 @@ class MainWindow(QMainWindow):
         self.kernel_panel.restart_button.clicked.connect(self._restart_active_kernel)
 
         self.variables_panel = VariablesPanel()
+        self.variables_panel.refresh_requested.connect(self._refresh_variables)
         self.log_panel = LogConsolePanel()
         self.terminal_panel = MiniTerminalPanel(self.root_dir)
 
@@ -328,7 +339,12 @@ class MainWindow(QMainWindow):
             kernel_id = kernel.get("id")
             execution_state = kernel.get("execution_state", "activo")
 
+            kernel_changed = kernel_id != self.active_kernel_id
             self.active_kernel_id = kernel_id
+            self.active_kernel_name = kernel_name
+
+            if kernel_changed:
+                self.variables_panel.set_variables([])
 
             uptime_seconds = int(time.time() - self.app_start_time)
             uptime_text = f"{uptime_seconds // 60}m {uptime_seconds % 60}s"
@@ -352,28 +368,27 @@ class MainWindow(QMainWindow):
                 f"{Path(self.root_dir).name}  •  {notebook_name}"
             )
 
-            if kernel_id:
-                try:
-                    variables = self.manager.variable_snapshot(
-                        kernel_id,
-                        kernel_name=kernel_name,
-                        timeout=3.0,
-                    )
-                except Exception as exc:
-                    variables = [
-                        {
-                            "name": "info",
-                            "type": "estado",
-                            "shape": "-",
-                            "value": "Ejecuta una celda.",
-                        }
-                    ]
-                    self._append_log(f"Variables: {exc}")
-
-                self.variables_panel.set_variables(variables)
 
         except Exception as exc:
             self._append_log(f"Refresh: {exc}")
+
+    def _refresh_variables(self) -> None:
+        if not self.active_kernel_id:
+            self.variables_panel.set_variables([])
+            return
+
+        self.variables_panel.set_refreshing(True)
+        try:
+            variables = self.manager.variable_snapshot(
+                self.active_kernel_id,
+                kernel_name=self.active_kernel_name,
+                timeout=5.0,
+            )
+            self.variables_panel.set_variables(variables)
+        except Exception as exc:
+            self._append_log(f"Variables: {exc}")
+        finally:
+            self.variables_panel.set_refreshing(False)
 
     def _go_home(self) -> None:
         self.browser.setUrl(QUrl(self.manager.open_url_for_path()))
