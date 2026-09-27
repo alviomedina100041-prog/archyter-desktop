@@ -490,9 +490,17 @@ class MainWindow(QMainWindow):
         console = QPlainTextEdit()
         console.setReadOnly(True)
         console.setPlainText(self.log_panel.all_text())
-        console.moveCursor(console.textCursor().MoveOperation.End)
         layout.addWidget(console, 1)
 
+        self.manager.log_line.connect(console.appendPlainText)
+
+        def disconnect_live_log(*_args) -> None:
+            try:
+                self.manager.log_line.disconnect(console.appendPlainText)
+            except (RuntimeError, TypeError):
+                pass
+
+        dialog.destroyed.connect(disconnect_live_log)
         self._register_popout(dialog)
 
     def _show_terminal_dialog(self) -> None:
