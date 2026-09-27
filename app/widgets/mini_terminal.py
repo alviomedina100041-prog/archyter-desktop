@@ -1,6 +1,6 @@
 import re
 
-from PySide6.QtCore import QProcess, QProcessEnvironment
+from PySide6.QtCore import QProcess, QProcessEnvironment, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -16,6 +16,7 @@ ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 class MiniTerminalPanel(QFrame):
+    expand_requested = Signal()
     def __init__(self, working_directory: str):
         super().__init__()
         self.setObjectName("PanelCard")
@@ -36,12 +37,19 @@ class MiniTerminalPanel(QFrame):
         self.process.start()
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(8)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
 
-        title = QLabel("Terminal")
-        title.setObjectName("SectionTitle")
-        layout.addWidget(title)
+        header = QHBoxLayout()
+
+        title = QPushButton("Terminal  ↗")
+        title.setObjectName("PanelTitleButton")
+        title.setToolTip("Abrir Terminal en una ventana grande")
+        title.clicked.connect(self.expand_requested.emit)
+
+        header.addWidget(title)
+        header.addStretch(1)
+        layout.addLayout(header)
 
         self.output = QPlainTextEdit()
         self.output.setObjectName("TerminalOutput")
