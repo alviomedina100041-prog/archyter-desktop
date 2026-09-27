@@ -423,9 +423,13 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
         """ if compact else ""
 
         page.runJavaScript(
-            r""" + f"""
-            window.__archyterCompactCSS = {json.dumps(compact_css)};
-            """ + r"""
+            "window.__archyterCompactCSS = "
+            + json.dumps(compact_css)
+            + ";"
+        )
+
+        page.runJavaScript(
+            r"""
             (() => {
                 const old = document.getElementById('archyter-shell-style');
                 if (old) old.remove();
