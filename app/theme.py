@@ -86,6 +86,21 @@ QPushButton#BackButton {
     padding: 2px 5px;
 }
 
+QPushButton#PanelTitleButton {
+    background-color: transparent;
+    border: none;
+    padding: 2px 3px;
+    color: #0f172a;
+    font-size: 12px;
+    font-weight: 700;
+    text-align: left;
+}
+
+QPushButton#PanelTitleButton:hover {
+    background-color: #f1f5f9;
+    color: #0369a1;
+}
+
 QLabel {
     background-color: transparent;
     color: #111827;
