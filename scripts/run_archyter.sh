@@ -12,11 +12,9 @@ fi
 # Conservative path for Intel Haswell / older Intel graphics.
 export QT_OPENGL=software
 export QT_QUICK_BACKEND=software
-export QSG_RHI_BACKEND=software
-export LIBGL_ALWAYS_SOFTWARE=1
 export LIBVA_DRIVER_NAME=i965
 
-EXTRA_FLAGS="--disable-gpu --disable-gpu-compositing --disable-gpu-rasterization --disable-vulkan --disable-accelerated-video-decode --disable-accelerated-video-encode --disable-features=VaapiVideoDecoder,VaapiVideoEncoder,Vulkan --use-gl=disabled"
+EXTRA_FLAGS="--disable-gpu --disable-gpu-compositing --disable-gpu-rasterization --disable-vulkan --disable-accelerated-video-decode --disable-accelerated-video-encode --disable-features=VaapiVideoDecoder,VaapiVideoEncoder,Vulkan --use-gl=disabled --log-level=3"
 export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:-} ${EXTRA_FLAGS}"
 
 TARGET="${1:-$HOME}"
