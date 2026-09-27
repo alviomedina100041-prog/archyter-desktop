@@ -42,12 +42,12 @@ class MiniTerminalPanel(QFrame):
 
         header = QHBoxLayout()
 
-        title = QPushButton("Terminal  ↗")
-        title.setObjectName("PanelTitleButton")
-        title.setToolTip("Abrir Terminal en una ventana grande")
-        title.clicked.connect(self.expand_requested.emit)
+        self.title_button = QPushButton("Terminal  ↗")
+        self.title_button.setObjectName("PanelTitleButton")
+        self.title_button.setToolTip("Abrir Terminal en una ventana grande")
+        self.title_button.clicked.connect(self.expand_requested.emit)
 
-        header.addWidget(title)
+        header.addWidget(self.title_button)
         header.addStretch(1)
         layout.addLayout(header)
 
