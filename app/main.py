@@ -4,6 +4,17 @@ import os
 import sys
 from pathlib import Path
 
+# Archyter targets old Intel laptops too. QtWebEngine/Chromium may otherwise
+# try Vulkan and VA-API paths that are noisy or unstable on Haswell.
+if os.environ.get("ARCHYTER_HW_ACCEL", "0") != "1":
+    current_flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+    safe_flags = (
+        "--disable-gpu "
+        "--disable-vulkan "
+        "--disable-features=VaapiVideoDecoder,VaapiVideoEncoder"
+    )
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = f"{current_flags} {safe_flags}".strip()
+
 from PySide6.QtWidgets import QApplication
 
 from .window import MainWindow
