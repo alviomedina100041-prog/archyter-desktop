@@ -344,9 +344,88 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
 
         return collected
 
-    def inject_shortcuts(self, page: Any) -> None:
+    def inject_shortcuts(self, page: Any, compact: bool = False) -> None:
+        compact_css = r"""
+            :root {
+                --jp-ui-font-size0: 10px !important;
+                --jp-ui-font-size1: 11px !important;
+                --jp-ui-font-size2: 12px !important;
+                --jp-code-font-size: 12px !important;
+            }
+
+            .jp-Notebook {
+                padding: 6px 8px 36px 8px !important;
+            }
+
+            .jp-Notebook-cell {
+                margin: 4px 0 !important;
+                border-radius: 7px !important;
+            }
+
+            .jp-NotebookPanel-toolbar {
+                min-height: 30px !important;
+                height: 30px !important;
+                padding: 0 4px !important;
+            }
+
+            .jp-Toolbar-item {
+                margin: 0 1px !important;
+            }
+
+            .jp-ToolbarButtonComponent {
+                min-width: 24px !important;
+                min-height: 24px !important;
+                padding: 2px 4px !important;
+            }
+
+            .lm-TabBar-tab {
+                min-height: 29px !important;
+                height: 29px !important;
+                padding: 0 8px !important;
+                font-size: 11px !important;
+            }
+
+            .jp-Cell-inputWrapper,
+            .jp-OutputArea {
+                margin: 0 !important;
+            }
+
+            .jp-InputPrompt,
+            .jp-OutputPrompt {
+                min-width: 40px !important;
+                width: 40px !important;
+                font-size: 10px !important;
+            }
+
+            .cm-editor,
+            .cm-scroller,
+            .jp-OutputArea-output,
+            .jp-RenderedText,
+            .jp-RenderedHTMLCommon {
+                font-size: 12px !important;
+            }
+
+            .jp-OutputArea-output table {
+                font-size: 10px !important;
+            }
+
+            .jp-OutputArea-output table th,
+            .jp-OutputArea-output table td {
+                padding: 2px 5px !important;
+            }
+
+            .jp-OutputArea-output img,
+            .jp-OutputArea-output canvas,
+            .jp-OutputArea-output svg {
+                max-width: 100% !important;
+                height: auto !important;
+            }
+        """ if compact else ""
+
         page.runJavaScript(
-            r"""
+            r""" + f"""
+            window.__archyterCompactCSS = {json.dumps(compact_css)};
+            """ + r"""
             (() => {
                 const old = document.getElementById('archyter-shell-style');
                 if (old) old.remove();
@@ -354,6 +433,8 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
                 const style = document.createElement('style');
                 style.id = 'archyter-shell-style';
                 style.textContent = `
+                    ${window.__archyterCompactCSS || ''}
+
                     :root {
                         color-scheme: light !important;
 
