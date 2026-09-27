@@ -137,7 +137,7 @@ class MainWindow(QMainWindow):
 
         self.browser = QWebEngineView()
         self.browser.setZoomFactor(1.0)
-        self.browser.setStyleSheet("background: #0b1220; border: none;")
+        self.browser.setStyleSheet("background: #ffffff; border: none;")
         self.browser.loadFinished.connect(self._on_page_loaded)
         layout.addWidget(self.browser, 1)
 
