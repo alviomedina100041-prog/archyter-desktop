@@ -82,6 +82,7 @@ class MainWindow(QMainWindow):
         self.app_start_time = time.time()
         self.active_kernel_id: str | None = None
         self.active_kernel_name: str = ""
+        self.active_document_path: str | None = None
         self._popout_dialogs: list[QDialog] = []
         self._page_retry_count = 0
 
@@ -528,8 +529,13 @@ class MainWindow(QMainWindow):
             )
 
             if session_path:
-                absolute = os.path.join(self.root_dir, session_path)
-                if os.path.exists(absolute):
+                absolute = os.path.abspath(
+                    os.path.join(self.root_dir, session_path)
+                )
+                if (
+                    os.path.exists(absolute)
+                    and absolute != self.active_document_path
+                ):
                     self.file_explorer.set_active_path(absolute)
                     self._set_active_document(absolute)
 
@@ -687,11 +693,13 @@ class MainWindow(QMainWindow):
 
     def _set_active_document(self, path: str | None) -> None:
         if not path:
+            self.active_document_path = None
             self.document_label.setText("Inicio del proyecto")
             self.document_location.setText(Path(self.root_dir).name)
             return
 
         absolute = os.path.abspath(path)
+        self.active_document_path = absolute
         self.document_label.setText(Path(absolute).name)
 
         try:
@@ -920,6 +928,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("last_project", self.root_dir)
         self.active_kernel_id = None
         self.active_kernel_name = ""
+        self.active_document_path = None
 
         self.file_explorer.set_root(self.root_dir)
         self._set_active_document(None)
