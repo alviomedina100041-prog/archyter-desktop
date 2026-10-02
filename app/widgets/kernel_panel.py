@@ -5,8 +5,11 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QStyle,
     QVBoxLayout,
 )
+
+from ..icons import themed_icon
 
 
 class KernelPanel(QFrame):
@@ -21,12 +24,22 @@ class KernelPanel(QFrame):
         header = QHBoxLayout()
         header.setSpacing(5)
 
+        icon_label = QLabel()
+        icon_label.setPixmap(
+            themed_icon(
+                "applications-system",
+                QStyle.StandardPixmap.SP_ComputerIcon,
+            ).pixmap(14, 14)
+        )
+        icon_label.setFixedSize(16, 16)
+
         title = QLabel("Kernel")
         title.setObjectName("SectionTitle")
 
         self.state_badge = QLabel("detenido")
         self.state_badge.setObjectName("StateBadgeOff")
 
+        header.addWidget(icon_label)
         header.addWidget(title)
         header.addStretch(1)
         header.addWidget(self.state_badge)
@@ -43,6 +56,12 @@ class KernelPanel(QFrame):
 
         self.restart_button = QPushButton("Reiniciar kernel")
         self.restart_button.setObjectName("SecondaryButton")
+        self.restart_button.setIcon(
+            themed_icon(
+                "view-refresh",
+                QStyle.StandardPixmap.SP_BrowserReload,
+            )
+        )
         layout.addWidget(self.restart_button)
 
     def update_info(self, kernel_name: str, state: str, uptime: str) -> None:
