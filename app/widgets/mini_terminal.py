@@ -11,8 +11,11 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QStyle,
     QVBoxLayout,
 )
+
+from ..icons import themed_icon
 
 
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
@@ -53,11 +56,23 @@ class MiniTerminalPanel(QFrame):
         header.setSpacing(4)
 
         self.title_button = QPushButton("Terminal")
+        self.title_button.setIcon(
+            themed_icon(
+                "utilities-terminal",
+                QStyle.StandardPixmap.SP_ComputerIcon,
+            )
+        )
         self.title_button.setObjectName("PanelTitleButton")
         self.title_button.setToolTip("Abrir Terminal en una ventana grande")
         self.title_button.clicked.connect(self.expand_requested.emit)
 
-        self.open_button = QPushButton("Abrir ↗")
+        self.open_button = QPushButton("Abrir")
+        self.open_button.setIcon(
+            themed_icon(
+                "window-new",
+                QStyle.StandardPixmap.SP_ArrowForward,
+            )
+        )
         self.open_button.setObjectName("PanelActionButton")
         self.open_button.setToolTip("Abrir terminal grande")
         self.open_button.clicked.connect(self.expand_requested.emit)
@@ -82,6 +97,12 @@ class MiniTerminalPanel(QFrame):
         self.input.returnPressed.connect(self.run_current_command)
 
         self.run_button = QPushButton("Ejecutar")
+        self.run_button.setIcon(
+            themed_icon(
+                "media-playback-start",
+                QStyle.StandardPixmap.SP_MediaPlay,
+            )
+        )
         self.run_button.setObjectName("CompactButton")
         self.run_button.clicked.connect(self.run_current_command)
 
