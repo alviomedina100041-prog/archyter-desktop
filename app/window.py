@@ -962,7 +962,8 @@ class MainWindow(QMainWindow):
             )
 
     def closeEvent(self, event) -> None:
-        self.refresh_timer.stop()
+        if hasattr(self, "refresh_timer"):
+            self.refresh_timer.stop()
 
         for dialog in list(self._popout_dialogs):
             dialog.close()
