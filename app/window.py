@@ -4,6 +4,7 @@ import os
 import time
 from pathlib import Path
 
+from send2trash import send2trash
 from PySide6.QtCore import QSettings, QTimer, Qt, QUrl
 from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
@@ -282,6 +283,9 @@ class MainWindow(QMainWindow):
         self.file_explorer.file_open_requested.connect(self._open_path)
         self.file_explorer.new_requested.connect(self._handle_new_requested)
         self.file_explorer.location_changed.connect(self._location_changed)
+        self.file_explorer.delete_requested.connect(
+            self._delete_path_from_explorer
+        )
         return self.file_explorer
 
     def _create_center_browser(self) -> QWidget:
@@ -752,6 +756,67 @@ class MainWindow(QMainWindow):
         self.file_explorer.set_active_path(path)
         self._set_active_document(path)
         self.browser.setUrl(QUrl(self.manager.open_url_for_path(path)))
+
+    def _delete_path_from_explorer(self, path: str) -> None:
+        target = Path(path).expanduser().resolve()
+
+        try:
+            target.relative_to(Path(self.root_dir).resolve())
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "No se puede eliminar",
+                "El archivo está fuera del proyecto activo.",
+            )
+            return
+
+        if not target.is_file():
+            QMessageBox.information(
+                self,
+                "Archivo no disponible",
+                "El archivo ya no existe o no es un archivo normal.",
+            )
+            self.file_explorer.refresh()
+            return
+
+        answer = QMessageBox.question(
+            self,
+            "Enviar a la papelera",
+            (
+                f"¿Quieres enviar a la papelera este archivo?\n\n"
+                f"{target.name}\n\n"
+                "Podrás recuperarlo desde la papelera del sistema."
+            ),
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+
+        try:
+            send2trash(str(target))
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "No se pudo eliminar",
+                f"No pude enviar el archivo a la papelera.\n\n{exc}",
+            )
+            return
+
+        was_active = (
+            self.active_document_path is not None
+            and Path(self.active_document_path).resolve() == target
+        )
+
+        self.file_explorer.refresh()
+
+        if was_active:
+            self._go_home()
+
+        self._append_log(f"Archivo enviado a la papelera: {target}")
+        self._set_status_text(f"Enviado a la papelera: {target.name}")
 
     def _new_notebook(self) -> None:
         directory = self._current_creation_directory()
