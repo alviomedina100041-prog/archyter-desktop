@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFrame,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -69,8 +70,6 @@ class MainWindow(QMainWindow):
             self.setMinimumSize(1100, 700)
 
         self.manager = JupyterServerManager(root_dir=self.root_dir)
-        self.manager.log_line.connect(self._append_log)
-        self.manager.status_changed.connect(self._update_status_text)
 
         self.app_start_time = time.time()
         self.active_kernel_id: str | None = None
@@ -79,6 +78,7 @@ class MainWindow(QMainWindow):
 
         self._build_ui()
         self.setStyleSheet(APP_STYLE)
+        self._connect_manager(self.manager)
         self._start_jupyter()
         self._start_timers()
 
@@ -108,9 +108,9 @@ class MainWindow(QMainWindow):
         self.main_splitter.setStretchFactor(2, 0)
 
         if self.compact_mode:
-            self.main_splitter.setSizes([215, 845, 275])
+            self.main_splitter.setSizes([205, 905, 220])
         else:
-            self.main_splitter.setSizes([270, 1040, 320])
+            self.main_splitter.setSizes([250, 1080, 280])
 
         root_layout.addWidget(self.main_splitter, 1)
         root_layout.addWidget(self._create_status_bar())
@@ -152,13 +152,16 @@ class MainWindow(QMainWindow):
         self.run_button.setObjectName("PrimaryButton")
         self.run_button.clicked.connect(self._run_active_cell)
 
-        self.kernel_button = QPushButton("Kernel")
+        self.kernel_button = QPushButton("Kernel ↻")
+        self.kernel_button.setToolTip("Reiniciar el kernel activo")
         self.kernel_button.clicked.connect(self._restart_active_kernel)
 
         self.terminal_button = QPushButton("Terminal")
-        self.terminal_button.clicked.connect(self._focus_terminal)
+        self.terminal_button.setToolTip("Abrir terminal grande")
+        self.terminal_button.clicked.connect(self._show_terminal_dialog)
 
-        self.settings_button = QPushButton("Ajustes")
+        self.settings_button = QPushButton("Proyecto")
+        self.settings_button.setToolTip("Cambiar la carpeta raíz del proyecto")
         self.settings_button.clicked.connect(self._choose_project_root)
 
         buttons = (
@@ -183,11 +186,11 @@ class MainWindow(QMainWindow):
         self.file_explorer = FileExplorerPanel(self.root_dir)
 
         if self.compact_mode:
-            self.file_explorer.setMinimumWidth(190)
-            self.file_explorer.setMaximumWidth(255)
+            self.file_explorer.setMinimumWidth(185)
+            self.file_explorer.setMaximumWidth(245)
         else:
-            self.file_explorer.setMinimumWidth(235)
-            self.file_explorer.setMaximumWidth(330)
+            self.file_explorer.setMinimumWidth(225)
+            self.file_explorer.setMaximumWidth(310)
 
         self.file_explorer.file_open_requested.connect(self._open_path)
         return self.file_explorer
@@ -206,7 +209,7 @@ class MainWindow(QMainWindow):
 
         self.browser = QWebEngineView()
         self.browser.setPage(QuietWebEnginePage(self.browser))
-        self.browser.setZoomFactor(0.82 if self.compact_mode else 1.0)
+        self.browser.setZoomFactor(0.88 if self.compact_mode else 1.0)
         self.browser.setStyleSheet("background: #ffffff; border: none;")
         self.browser.loadFinished.connect(self._on_page_loaded)
         layout.addWidget(self.browser, 1)
@@ -218,20 +221,25 @@ class MainWindow(QMainWindow):
         frame.setObjectName("RightSidebar")
 
         if self.compact_mode:
+            frame.setMinimumWidth(205)
+            frame.setMaximumWidth(250)
+        else:
             frame.setMinimumWidth(250)
             frame.setMaximumWidth(310)
-        else:
-            frame.setMinimumWidth(290)
-            frame.setMaximumWidth(370)
 
         layout = QVBoxLayout(frame)
+        layout.setContentsMargins(7, 7, 7, 7)
+        layout.setSpacing(6)
 
-        if self.compact_mode:
-            layout.setContentsMargins(6, 6, 6, 6)
-            layout.setSpacing(6)
-        else:
-            layout.setContentsMargins(10, 10, 10, 10)
-            layout.setSpacing(10)
+        heading = QHBoxLayout()
+        title = QLabel("Inspector")
+        title.setObjectName("SectionTitle")
+        subtitle = QLabel("sesión")
+        subtitle.setObjectName("MutedLabel")
+        heading.addWidget(title)
+        heading.addStretch(1)
+        heading.addWidget(subtitle)
+        layout.addLayout(heading)
 
         self.kernel_panel = KernelPanel()
         self.kernel_panel.restart_button.clicked.connect(self._restart_active_kernel)
@@ -247,23 +255,28 @@ class MainWindow(QMainWindow):
         self.terminal_panel.expand_requested.connect(self._show_terminal_dialog)
 
         if self.compact_mode:
-            self.kernel_panel.setMinimumHeight(100)
-            self.kernel_panel.setMaximumHeight(125)
+            self.kernel_panel.setMinimumHeight(102)
+            self.kernel_panel.setMaximumHeight(116)
 
-            self.variables_panel.setMinimumHeight(145)
-            self.variables_panel.setMaximumHeight(190)
+            self.variables_panel.setMinimumHeight(128)
+            self.variables_panel.setMaximumHeight(160)
 
-            self.log_panel.setMinimumHeight(105)
-            self.log_panel.setMaximumHeight(145)
+            self.log_panel.setMinimumHeight(92)
+            self.log_panel.setMaximumHeight(120)
 
-            self.terminal_panel.setMinimumHeight(145)
+            self.terminal_panel.setMinimumHeight(125)
+            self.terminal_panel.setMaximumHeight(155)
         else:
-            self.terminal_panel.setMinimumHeight(210)
+            self.kernel_panel.setMaximumHeight(130)
+            self.variables_panel.setMinimumHeight(155)
+            self.log_panel.setMinimumHeight(120)
+            self.terminal_panel.setMinimumHeight(170)
 
         layout.addWidget(self.kernel_panel)
-        layout.addWidget(self.variables_panel, 1)
-        layout.addWidget(self.log_panel, 1)
-        layout.addWidget(self.terminal_panel, 1)
+        layout.addWidget(self.variables_panel)
+        layout.addWidget(self.log_panel)
+        layout.addWidget(self.terminal_panel)
+        layout.addStretch(1)
 
         return frame
 
@@ -292,6 +305,10 @@ class MainWindow(QMainWindow):
 
         return frame
 
+    def _connect_manager(self, manager: JupyterServerManager) -> None:
+        manager.log_line.connect(self._append_log)
+        manager.status_changed.connect(self._update_status_text)
+
     def _start_jupyter(self) -> None:
         try:
             self.manager.start()
@@ -308,6 +325,8 @@ class MainWindow(QMainWindow):
 
     def _on_page_loaded(self, ok: bool) -> None:
         if not ok:
+            self._append_log("No se pudo cargar la vista de JupyterLab.")
+            self.left_status.setText("Error al cargar JupyterLab")
             return
 
         self.manager.inject_shortcuts(
@@ -450,8 +469,21 @@ class MainWindow(QMainWindow):
 
         table = QTableWidget(0, 4)
         table.setHorizontalHeaderLabels(["Nombre", "Tipo", "Forma", "Valor"])
-        table.horizontalHeader().setStretchLastSection(True)
+        table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.ResizeMode.ResizeToContents
+        )
+        table.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.ResizeMode.ResizeToContents
+        )
+        table.horizontalHeader().setSectionResizeMode(
+            2, QHeaderView.ResizeMode.ResizeToContents
+        )
+        table.horizontalHeader().setSectionResizeMode(
+            3, QHeaderView.ResizeMode.Stretch
+        )
         table.verticalHeader().setVisible(False)
+        table.setAlternatingRowColors(True)
+        table.setShowGrid(False)
         layout.addWidget(table, 1)
 
         def populate() -> None:
@@ -488,7 +520,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(title)
 
         console = QPlainTextEdit()
+        console.setObjectName("LogDialog")
         console.setReadOnly(True)
+        console.setLineWrapMode(QPlainTextEdit.LineWrapMode.NoWrap)
         console.setPlainText(self.log_panel.all_text())
         layout.addWidget(console, 1)
 
@@ -513,6 +547,7 @@ class MainWindow(QMainWindow):
             terminal.title_button.hide()
 
         layout.addWidget(terminal, 1)
+        dialog.finished.connect(lambda _code: terminal.shutdown())
         self._register_popout(dialog)
 
     def _go_home(self) -> None:
@@ -564,26 +599,75 @@ class MainWindow(QMainWindow):
                 f"No se pudo reiniciar: {exc}",
             )
 
-    def _focus_terminal(self) -> None:
-        self.terminal_panel.input.setFocus()
-
     def _choose_project_root(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             self,
             "Selecciona una carpeta de proyecto",
             self.root_dir,
+            QFileDialog.Option.ShowDirsOnly
+            | QFileDialog.Option.DontUseNativeDialog,
         )
 
         if not folder:
             return
 
-        QMessageBox.information(
-            self,
-            "Carpeta de proyecto",
-            "En esta versión el cambio de raíz se aplica al reiniciar.\n\n"
-            f"Carpeta elegida: {folder}",
+        new_root = os.path.abspath(folder)
+        if new_root == self.root_dir:
+            return
+
+        self._switch_project_root(new_root)
+
+    def _switch_project_root(self, new_root: str) -> None:
+        self.left_status.setText("Cambiando proyecto…")
+        QApplication.processEvents()
+
+        try:
+            self.manager.shutdown()
+        except Exception as exc:
+            self._append_log(f"Cierre del servidor anterior: {exc}")
+
+        self.root_dir = os.path.abspath(new_root)
+        self.active_kernel_id = None
+        self.active_kernel_name = ""
+
+        self.file_explorer.set_root(self.root_dir)
+        self.variables_panel.set_variables([])
+        self.terminal_panel.set_working_directory(self.root_dir)
+
+        self.manager = JupyterServerManager(root_dir=self.root_dir)
+        self._connect_manager(self.manager)
+
+        self.browser.setHtml(
+            "<html><body style='font-family:sans-serif;padding:28px;"
+            "color:#64748b;background:#fff'>"
+            "<h3>Abriendo proyecto…</h3>"
+            "<p>Iniciando JupyterLab en la nueva carpeta.</p>"
+            "</body></html>"
         )
 
+        try:
+            self._start_jupyter()
+            self.left_status.setText(
+                f"Proyecto: {Path(self.root_dir).name}"
+            )
+            self._append_log(
+                f"Proyecto activo: {self.root_dir}"
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "No se pudo abrir el proyecto",
+                str(exc),
+            )
+
     def closeEvent(self, event) -> None:
+        self.refresh_timer.stop()
+
+        for dialog in list(self._popout_dialogs):
+            dialog.close()
+
+        if hasattr(self, "terminal_panel"):
+            self.terminal_panel.shutdown()
+
         self.manager.shutdown()
         super().closeEvent(event)
