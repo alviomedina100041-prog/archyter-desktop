@@ -219,6 +219,24 @@ QToolButton#ExplorerToolButton:hover {
     border-color: #93c5fd;
 }
 
+QToolButton#ExplorerDeleteButton {
+    background: #ffffff;
+    color: #b42318;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    padding: 2px;
+}
+
+QToolButton#ExplorerDeleteButton:hover {
+    background: #fff1f2;
+    color: #9f1239;
+    border-color: #fda4af;
+}
+
+QToolButton#ExplorerDeleteButton:pressed {
+    background: #ffe4e6;
+}
+
 QPushButton#PrimaryButton {
     background-color: #0ea5e9;
     border-color: #0ea5e9;
