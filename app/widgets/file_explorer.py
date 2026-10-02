@@ -68,6 +68,7 @@ class FileExplorerPanel(QFrame):
     file_open_requested = Signal(str)
     location_changed = Signal(str)
     new_requested = Signal(str)
+    delete_requested = Signal(str)
 
     def __init__(self, root_dir: str):
         super().__init__()
@@ -167,10 +168,76 @@ class FileExplorerPanel(QFrame):
         self.tree.clicked.connect(self._on_clicked)
         self.tree.doubleClicked.connect(self._on_double_click)
 
+        # A real delete control replaces the ambiguous empty blue block that
+        # appears in the indentation area of the selected file row.
+        self.delete_btn = QToolButton(self.tree.viewport())
+        self.delete_btn.setObjectName("ExplorerDeleteButton")
+        self.delete_btn.setIcon(
+            themed_icon(
+                "user-trash",
+                QStyle.StandardPixmap.SP_TrashIcon,
+            )
+        )
+        self.delete_btn.setToolTip("Enviar archivo seleccionado a la papelera")
+        self.delete_btn.setFixedSize(24, 22)
+        self.delete_btn.hide()
+        self.delete_btn.clicked.connect(self._request_delete_selected)
+
+        self.tree.selectionModel().selectionChanged.connect(
+            lambda *_args: self._position_delete_button()
+        )
+        self.tree.verticalScrollBar().valueChanged.connect(
+            lambda _value: self._position_delete_button()
+        )
+        self.tree.expanded.connect(
+            lambda _index: self._position_delete_button()
+        )
+        self.tree.collapsed.connect(
+            lambda _index: self._position_delete_button()
+        )
+
         for i in range(1, 4):
             self.tree.hideColumn(i)
 
         layout.addWidget(self.tree, 1)
+
+    def _selected_file_path(self) -> str | None:
+        path = self.selected_path()
+        if not path or not os.path.isfile(path):
+            return None
+        return os.path.abspath(path)
+
+    def _request_delete_selected(self) -> None:
+        path = self._selected_file_path()
+        if not path:
+            self.delete_btn.hide()
+            return
+        self.delete_requested.emit(path)
+
+    def _position_delete_button(self) -> None:
+        path = self._selected_file_path()
+        if not path:
+            self.delete_btn.hide()
+            return
+
+        index = self.model.index(path)
+        if not index.isValid():
+            self.delete_btn.hide()
+            return
+
+        rect = self.tree.visualRect(index)
+        if not rect.isValid() or not self.tree.viewport().rect().intersects(rect):
+            self.delete_btn.hide()
+            return
+
+        x = 3
+        y = rect.top() + max(
+            0,
+            (rect.height() - self.delete_btn.height()) // 2,
+        )
+        self.delete_btn.move(x, y)
+        self.delete_btn.show()
+        self.delete_btn.raise_()
 
     def _display_location(self, path: str) -> str:
         location = Path(path)
@@ -210,6 +277,7 @@ class FileExplorerPanel(QFrame):
     def _on_clicked(self, index: QModelIndex) -> None:
         path = self.model.filePath(index)
         self._set_location(path)
+        self._position_delete_button()
 
     def _on_double_click(self, index: QModelIndex) -> None:
         path = self.model.filePath(index)
@@ -239,6 +307,7 @@ class FileExplorerPanel(QFrame):
                 parent = parent.parent()
 
         self._set_location(os.path.dirname(resolved))
+        self._position_delete_button()
 
     def refresh(self) -> None:
         current_root = self.root_dir
@@ -248,6 +317,9 @@ class FileExplorerPanel(QFrame):
 
         if self._active_path and os.path.exists(self._active_path):
             self.set_active_path(self._active_path)
+        else:
+            self._active_path = None
+            self.delete_btn.hide()
 
     def set_root(self, root_dir: str) -> None:
         self.root_dir = os.path.abspath(root_dir)
@@ -260,3 +332,4 @@ class FileExplorerPanel(QFrame):
         self.model.setRootPath(self.root_dir)
         self.tree.setRootIndex(self.model.index(self.root_dir))
         self.tree.collapseAll()
+        self.delete_btn.hide()
