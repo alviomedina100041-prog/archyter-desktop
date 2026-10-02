@@ -4,7 +4,7 @@ import os
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QTimer, Qt, QUrl
+from PySide6.QtCore import QSettings, QTimer, Qt, QUrl
 from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
@@ -47,6 +47,8 @@ class MainWindow(QMainWindow):
         super().__init__()
 
         self.root_dir = os.path.abspath(root_dir or os.getcwd())
+        self.settings = QSettings("EduardoMedinaLabs", "ArchyterDesktop")
+        self.settings.setValue("last_project", self.root_dir)
         self.setWindowTitle("Archyter Desktop")
 
         screen = QApplication.primaryScreen()
@@ -627,6 +629,7 @@ class MainWindow(QMainWindow):
             self._append_log(f"Cierre del servidor anterior: {exc}")
 
         self.root_dir = os.path.abspath(new_root)
+        self.settings.setValue("last_project", self.root_dir)
         self.active_kernel_id = None
         self.active_kernel_name = ""
 
