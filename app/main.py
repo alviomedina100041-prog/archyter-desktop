@@ -44,6 +44,7 @@ configure_safe_graphics()
 from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtWidgets import QApplication
 
+from .icons import app_icon
 from .window import MainWindow
 
 
@@ -69,7 +70,9 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setApplicationName("Archyter Desktop")
     app.setOrganizationName("EduardoMedinaLabs")
+    app.setDesktopFileName("archyter-desktop")
     app.setStyle("Fusion")
+    app.setWindowIcon(app_icon())
 
     window = MainWindow(root_dir=resolve_root_dir())
 
