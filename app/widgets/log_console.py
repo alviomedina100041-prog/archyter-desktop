@@ -7,8 +7,11 @@ from PySide6.QtWidgets import (
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QStyle,
     QVBoxLayout,
 )
+
+from ..icons import themed_icon
 
 
 class LogConsolePanel(QFrame):
@@ -27,6 +30,12 @@ class LogConsolePanel(QFrame):
         header.setSpacing(4)
 
         title = QPushButton("Consola / logs")
+        title.setIcon(
+            themed_icon(
+                "utilities-log-viewer",
+                QStyle.StandardPixmap.SP_MessageBoxInformation,
+            )
+        )
         title.setObjectName("PanelTitleButton")
         title.setToolTip("Abrir Consola / logs en una ventana grande")
         title.clicked.connect(self.expand_requested.emit)
@@ -34,7 +43,13 @@ class LogConsolePanel(QFrame):
         self.count_label = QLabel("0")
         self.count_label.setObjectName("CountBadge")
 
-        open_button = QPushButton("Abrir ↗")
+        open_button = QPushButton("Abrir")
+        open_button.setIcon(
+            themed_icon(
+                "window-new",
+                QStyle.StandardPixmap.SP_ArrowForward,
+            )
+        )
         open_button.setObjectName("PanelActionButton")
         open_button.clicked.connect(self.expand_requested.emit)
 
