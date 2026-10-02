@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -75,7 +76,6 @@ class JupyterServerManager(QObject):
             f"--ServerApp.port={port}",
             f"--ServerApp.token={token}",
             f"--ServerApp.root_dir={self.root_dir}",
-            "--ServerApp.allow_origin=*",
         ]
 
         self.status_changed.emit("iniciando")
@@ -109,7 +109,13 @@ class JupyterServerManager(QObject):
         if not self.process or not self.process.stdout:
             return
         for line in self.process.stdout:
-            self.log_line.emit(line.rstrip())
+            cleaned = line.rstrip()
+            cleaned = re.sub(
+                r"([?&]token=)[^&\\s]+",
+                r"\\1••••••••",
+                cleaned,
+            )
+            self.log_line.emit(cleaned)
 
     def api_get(self, path: str, params: dict[str, Any] | None = None) -> requests.Response:
         return requests.get(
