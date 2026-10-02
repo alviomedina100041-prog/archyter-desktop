@@ -37,8 +37,13 @@ class WindowSmokeTests(unittest.TestCase):
                     ["Notebook", "Carpeta", "Archivo de texto"],
                 )
 
-                window._open_path(str(notebook))
-                self.app.processEvents()
+                with patch.object(
+                    window.manager,
+                    "open_url_for_path",
+                    return_value="about:blank",
+                ):
+                    window._open_path(str(notebook))
+                    self.app.processEvents()
 
                 self.assertEqual(window.document_label.text(), "90200.ipynb")
                 self.assertEqual(
