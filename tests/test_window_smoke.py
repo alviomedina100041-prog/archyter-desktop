@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtWidgets import QApplication, QToolButton
+from PySide6.QtWidgets import QApplication, QMessageBox, QToolButton
 
 from app.window import MainWindow
 
@@ -54,6 +54,20 @@ class WindowSmokeTests(unittest.TestCase):
                 self.assertFalse(window.new_button.icon().isNull())
                 self.assertFalse(window.save_button.icon().isNull())
                 self.assertFalse(window.run_button.icon().isNull())
+
+                disposable = nested / "borrar.txt"
+                disposable.write_text("temporal", encoding="utf-8")
+
+                with (
+                    patch(
+                        "app.window.QMessageBox.question",
+                        return_value=QMessageBox.StandardButton.Yes,
+                    ),
+                    patch("app.window.send2trash") as trash,
+                ):
+                    window._delete_path_from_explorer(str(disposable))
+
+                trash.assert_called_once_with(str(disposable.resolve()))
             finally:
                 window.terminal_panel.shutdown()
                 window.close()
