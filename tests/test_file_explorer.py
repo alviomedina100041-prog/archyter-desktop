@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
 from app.widgets.file_explorer import FileExplorerPanel
@@ -48,6 +49,17 @@ class FileExplorerTests(unittest.TestCase):
                 )
                 self.assertIsNotNone(icon)
                 self.assertFalse(icon.isNull())
+
+                self.assertFalse(panel.delete_btn.icon().isNull())
+                self.assertTrue(panel.delete_btn.isVisible())
+
+                spy = QSignalSpy(panel.delete_requested)
+                panel._request_delete_selected()
+                self.assertEqual(spy.count(), 1)
+                self.assertEqual(
+                    os.path.abspath(str(spy.at(0)[0])),
+                    os.path.abspath(str(notebook)),
+                )
             finally:
                 panel.close()
 
