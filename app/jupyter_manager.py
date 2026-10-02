@@ -51,6 +51,23 @@ class JupyterServerManager(QObject):
             raise RuntimeError("Jupyter server is not running.")
         return self.server_info.token
 
+    @property
+    def lab_url(self) -> str:
+        return f"{self.base_url}/lab?token={self.token}"
+
+    def _relative_to_root(self, path: str | os.PathLike[str]) -> str:
+        root = Path(self.root_dir).resolve()
+        candidate = Path(path).expanduser().resolve()
+
+        try:
+            relative = candidate.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(
+                "La ubicación seleccionada está fuera del proyecto activo."
+            ) from exc
+
+        return relative.as_posix()
+
     def _free_port(self) -> int:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind(("127.0.0.1", 0))
@@ -76,6 +93,8 @@ class JupyterServerManager(QObject):
             f"--ServerApp.port={port}",
             f"--ServerApp.token={token}",
             f"--ServerApp.root_dir={self.root_dir}",
+            "--ServerApp.open_browser=False",
+            "--ServerApp.allow_remote_access=False",
         ]
 
         self.status_changed.emit("iniciando")
@@ -92,18 +111,33 @@ class JupyterServerManager(QObject):
         self._reader_thread.start()
 
         deadline = time.time() + timeout
+        api_ready = False
+
         while time.time() < deadline:
             if self.process.poll() is not None:
                 raise RuntimeError("JupyterLab se cerró antes de iniciar.")
-            try:
-                response = self.api_get("/api")
-                if response.status_code == 200:
-                    self.status_changed.emit("conectado")
-                    return
-            except Exception:
-                time.sleep(0.35)
 
-        raise TimeoutError("No se pudo iniciar JupyterLab a tiempo.")
+            try:
+                if not api_ready:
+                    response = self.api_get("/api")
+                    api_ready = response.status_code == 200
+
+                if api_ready:
+                    lab_response = requests.get(
+                        self.lab_url,
+                        timeout=5,
+                    )
+                    if lab_response.status_code == 200:
+                        self.status_changed.emit("conectado")
+                        return
+            except Exception:
+                pass
+
+            time.sleep(0.35)
+
+        raise TimeoutError(
+            "JupyterLab inició el proceso, pero la interfaz web no quedó lista a tiempo."
+        )
 
     def _read_logs(self) -> None:
         if not self.process or not self.process.stdout:
@@ -157,27 +191,42 @@ class JupyterServerManager(QObject):
         response = self.api_post(f"/api/kernels/{kernel_id}/restart")
         response.raise_for_status()
 
-    def open_url_for_path(self, path: str | os.PathLike[str] | None = None) -> str:
+    def open_url_for_path(
+        self,
+        path: str | os.PathLike[str] | None = None,
+    ) -> str:
         if path:
-            relative = os.path.relpath(os.fspath(path), self.root_dir).replace("\\", "/")
-            return f"{self.base_url}/lab/tree/{quote(relative)}?token={self.token}"
-        return f"{self.base_url}/lab?token={self.token}"
+            relative = self._relative_to_root(path)
+            return (
+                f"{self.base_url}/lab/tree/{quote(relative)}"
+                f"?token={self.token}"
+            )
+        return self.lab_url
 
     def create_notebook(self, directory: str | None = None) -> str:
-        rel_dir = ""
-        if directory:
-            rel_dir = os.path.relpath(directory, self.root_dir).replace("\\", "/")
-            if rel_dir == ".":
-                rel_dir = ""
+        target_directory = directory or self.root_dir
+        rel_dir = self._relative_to_root(target_directory)
 
         endpoint = "/api/contents"
         if rel_dir:
             endpoint += f"/{quote(rel_dir)}"
 
-        response = self.api_post(endpoint, {"type": "notebook", "ext": ".ipynb"})
+        response = self.api_post(
+            endpoint,
+            {
+                "type": "notebook",
+                "ext": ".ipynb",
+            },
+        )
         response.raise_for_status()
         data = response.json()
-        return os.path.join(self.root_dir, data["path"])
+
+        created = Path(self.root_dir) / str(data["path"])
+        created = created.resolve()
+
+        # A successful API response must still resolve inside the project.
+        self._relative_to_root(created)
+        return str(created)
 
     def variable_snapshot(
         self,
@@ -364,8 +413,8 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
             }
 
             .jp-Notebook-cell {
-                margin: 4px 0 !important;
-                border-radius: 7px !important;
+                margin: 5px 0 !important;
+                border-radius: 8px !important;
             }
 
             .jp-NotebookPanel-toolbar {
@@ -569,14 +618,36 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
                     .jp-Notebook-cell {
                         background: #ffffff !important;
                         border: 1px solid #e2e8f0 !important;
+                        border-left: 3px solid transparent !important;
                         border-radius: 10px !important;
                         margin: 8px 0 !important;
                         box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+                        transition:
+                            border-color 140ms ease,
+                            box-shadow 140ms ease,
+                            transform 140ms ease !important;
+                    }
+
+                    .jp-Notebook-cell:hover {
+                        border-color: #cbd5e1 !important;
+                        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06) !important;
                     }
 
                     .jp-Notebook-cell.jp-mod-active {
                         border-color: #7dd3fc !important;
+                        border-left-color: #0ea5e9 !important;
+                        background: #fbfdff !important;
                         box-shadow: 0 0 0 1px #bae6fd !important;
+                        transform: translateY(-1px) !important;
+                    }
+
+                    /* Jupyter's floating per-cell toolbar can render broken
+                       glyph boxes when an extension asset fails to load.
+                       Archyter keeps the stable notebook toolbar instead. */
+                    .jp-cell-toolbar,
+                    .jp-Cell-toolbar,
+                    .jp-Notebook-cell .jp-Toolbar.jp-cell-toolbar {
+                        display: none !important;
                     }
 
                     .jp-NotebookPanel-toolbar,
@@ -589,14 +660,23 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
 
                     .lm-TabBar-tab {
                         background: #ffffff !important;
-                        color: #475569 !important;
+                        color: #64748b !important;
                         border-color: #e2e8f0 !important;
+                        transition:
+                            background 120ms ease,
+                            color 120ms ease !important;
+                    }
+
+                    .lm-TabBar-tab:hover {
+                        background: #f6f9fc !important;
+                        color: #334155 !important;
                     }
 
                     .lm-TabBar-tab.lm-mod-current {
-                        background: #f8fafc !important;
-                        color: #0f172a !important;
-                        border-top: 2px solid #38bdf8 !important;
+                        background: #eef7ff !important;
+                        color: #0f5f9e !important;
+                        border-top: 2px solid #0ea5e9 !important;
+                        font-weight: 700 !important;
                     }
 
                     .jp-InputArea-editor,
@@ -640,8 +720,16 @@ print("__ARCHYTER_VARS__" + json.dumps(_items))
                         fill: #334155 !important;
                     }
 
+                    .jp-ToolbarButtonComponent {
+                        border-radius: 6px !important;
+                        transition:
+                            background 120ms ease,
+                            transform 120ms ease !important;
+                    }
+
                     .jp-ToolbarButtonComponent:hover {
-                        background: #f1f5f9 !important;
+                        background: #eaf5ff !important;
+                        transform: translateY(-1px) !important;
                     }
 
                     * {
