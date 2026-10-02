@@ -14,18 +14,23 @@ from PySide6.QtWidgets import (
     QFrame,
     QHeaderView,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QSplitter,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
 
+from .icons import app_icon, themed_icon
 from .jupyter_manager import JupyterServerManager
 from .theme import APP_STYLE
 from .widgets.file_explorer import FileExplorerPanel
@@ -50,6 +55,7 @@ class MainWindow(QMainWindow):
         self.settings = QSettings("EduardoMedinaLabs", "ArchyterDesktop")
         self.settings.setValue("last_project", self.root_dir)
         self.setWindowTitle("Archyter Desktop")
+        self.setWindowIcon(app_icon())
 
         screen = QApplication.primaryScreen()
         available = screen.availableGeometry() if screen else None
@@ -77,6 +83,7 @@ class MainWindow(QMainWindow):
         self.active_kernel_id: str | None = None
         self.active_kernel_name: str = ""
         self._popout_dialogs: list[QDialog] = []
+        self._page_retry_count = 0
 
         self._build_ui()
         self.setStyleSheet(APP_STYLE)
@@ -133,36 +140,113 @@ class MainWindow(QMainWindow):
             layout.setContentsMargins(16, 12, 16, 12)
             layout.setSpacing(10)
 
-        back_btn = QPushButton("←")
+        back_btn = QPushButton()
         back_btn.setObjectName("BackButton")
+        back_btn.setIcon(
+            themed_icon(
+                "go-previous",
+                QStyle.StandardPixmap.SP_ArrowBack,
+            )
+        )
+        back_btn.setToolTip("Volver al inicio del proyecto")
         back_btn.setFixedWidth(32 if self.compact_mode else 42)
         back_btn.clicked.connect(self._go_home)
         layout.addWidget(back_btn)
+
+        icon_label = QLabel()
+        icon_label.setObjectName("AppIcon")
+        icon_label.setPixmap(
+            app_icon().pixmap(24, 24)
+        )
+        icon_label.setFixedSize(28, 28)
+        icon_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(icon_label)
 
         title = QLabel("Archyter Desktop")
         title.setObjectName("TitleLabel")
         layout.addWidget(title)
         layout.addStretch(1)
 
-        self.new_button = QPushButton("Nuevo")
-        self.new_button.clicked.connect(self._new_notebook)
+        self.new_button = QToolButton()
+        self.new_button.setObjectName("ToolbarMenuButton")
+        self.new_button.setText("Nuevo")
+        self.new_button.setIcon(
+            themed_icon(
+                "document-new",
+                QStyle.StandardPixmap.SP_FileDialogNewFolder,
+            )
+        )
+        self.new_button.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.new_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+
+        new_menu = QMenu(self.new_button)
+        notebook_action = new_menu.addAction(
+            themed_icon("application-x-ipynb"),
+            "Notebook",
+        )
+        folder_action = new_menu.addAction(
+            themed_icon(
+                "folder-new",
+                QStyle.StandardPixmap.SP_FileDialogNewFolder,
+            ),
+            "Carpeta",
+        )
+        file_action = new_menu.addAction(
+            themed_icon("text-x-generic"),
+            "Archivo de texto",
+        )
+
+        notebook_action.triggered.connect(self._new_notebook)
+        folder_action.triggered.connect(self._new_folder)
+        file_action.triggered.connect(self._new_text_file)
+        self.new_button.setMenu(new_menu)
 
         self.save_button = QPushButton("Guardar")
+        self.save_button.setIcon(
+            themed_icon(
+                "document-save",
+                QStyle.StandardPixmap.SP_DialogSaveButton,
+            )
+        )
         self.save_button.clicked.connect(self._save_active_document)
 
-        self.run_button = QPushButton("▶ Ejecutar")
+        self.run_button = QPushButton("Ejecutar")
         self.run_button.setObjectName("PrimaryButton")
+        self.run_button.setIcon(
+            themed_icon(
+                "media-playback-start",
+                QStyle.StandardPixmap.SP_MediaPlay,
+            )
+        )
         self.run_button.clicked.connect(self._run_active_cell)
 
-        self.kernel_button = QPushButton("Kernel ↻")
+        self.kernel_button = QPushButton("Kernel")
+        self.kernel_button.setIcon(
+            themed_icon(
+                "view-refresh",
+                QStyle.StandardPixmap.SP_BrowserReload,
+            )
+        )
         self.kernel_button.setToolTip("Reiniciar el kernel activo")
         self.kernel_button.clicked.connect(self._restart_active_kernel)
 
         self.terminal_button = QPushButton("Terminal")
+        self.terminal_button.setIcon(
+            themed_icon(
+                "utilities-terminal",
+                QStyle.StandardPixmap.SP_ComputerIcon,
+            )
+        )
         self.terminal_button.setToolTip("Abrir terminal grande")
         self.terminal_button.clicked.connect(self._show_terminal_dialog)
 
         self.settings_button = QPushButton("Proyecto")
+        self.settings_button.setIcon(
+            themed_icon(
+                "folder-open",
+                QStyle.StandardPixmap.SP_DirOpenIcon,
+            )
+        )
         self.settings_button.setToolTip("Cambiar la carpeta raíz del proyecto")
         self.settings_button.clicked.connect(self._choose_project_root)
 
@@ -195,6 +279,8 @@ class MainWindow(QMainWindow):
             self.file_explorer.setMaximumWidth(310)
 
         self.file_explorer.file_open_requested.connect(self._open_path)
+        self.file_explorer.new_requested.connect(self._handle_new_requested)
+        self.file_explorer.location_changed.connect(self._location_changed)
         return self.file_explorer
 
     def _create_center_browser(self) -> QWidget:
@@ -203,11 +289,43 @@ class MainWindow(QMainWindow):
 
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(
-            2 if self.compact_mode else 8,
-            2 if self.compact_mode else 8,
-            2 if self.compact_mode else 8,
-            2 if self.compact_mode else 8,
+            5 if self.compact_mode else 8,
+            5 if self.compact_mode else 8,
+            5 if self.compact_mode else 8,
+            5 if self.compact_mode else 8,
         )
+        layout.setSpacing(5)
+
+        document_bar = QFrame()
+        document_bar.setObjectName("DocumentBar")
+        document_bar.setFixedHeight(30 if self.compact_mode else 34)
+
+        document_layout = QHBoxLayout(document_bar)
+        document_layout.setContentsMargins(8, 2, 8, 2)
+        document_layout.setSpacing(6)
+
+        self.document_icon = QLabel()
+        self.document_icon.setPixmap(
+            themed_icon(
+                "application-x-ipynb",
+                QStyle.StandardPixmap.SP_FileIcon,
+            ).pixmap(16, 16)
+        )
+        self.document_icon.setFixedSize(18, 18)
+
+        self.document_label = QLabel("Inicio del proyecto")
+        self.document_label.setObjectName("ActiveDocumentLabel")
+
+        self.document_location = QLabel(Path(self.root_dir).name)
+        self.document_location.setObjectName("MutedLabel")
+        self.document_location.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+
+        document_layout.addWidget(self.document_icon)
+        document_layout.addWidget(self.document_label)
+        document_layout.addStretch(1)
+        document_layout.addWidget(self.document_location)
+
+        layout.addWidget(document_bar)
 
         self.browser = QWebEngineView()
         self.browser.setPage(QuietWebEnginePage(self.browser))
@@ -327,10 +445,19 @@ class MainWindow(QMainWindow):
 
     def _on_page_loaded(self, ok: bool) -> None:
         if not ok:
+            if self._page_retry_count < 2:
+                self._page_retry_count += 1
+                self._append_log(
+                    f"JupyterLab no respondió; reintento {self._page_retry_count}/2."
+                )
+                QTimer.singleShot(700, self.browser.reload)
+                return
+
             self._append_log("No se pudo cargar la vista de JupyterLab.")
             self.left_status.setText("Error al cargar JupyterLab")
             return
 
+        self._page_retry_count = 0
         self.manager.inject_shortcuts(
             self.browser.page(),
             compact=self.compact_mode,
@@ -394,11 +521,17 @@ class MainWindow(QMainWindow):
                 f"{kernel_name} | conectado | UTF-8 | Archyter"
             )
 
-            notebook_name = Path(session.get("path", "-")).name
+            session_path = session.get("path", "")
+            notebook_name = Path(session_path or "-").name
             self.left_status.setText(
                 f"{Path(self.root_dir).name}  •  {notebook_name}"
             )
 
+            if session_path:
+                absolute = os.path.join(self.root_dir, session_path)
+                if os.path.exists(absolute):
+                    self.file_explorer.set_active_path(absolute)
+                    self._set_active_document(absolute)
 
         except Exception as exc:
             self._append_log(f"Refresh: {exc}")
@@ -552,21 +685,176 @@ class MainWindow(QMainWindow):
         dialog.finished.connect(lambda _code: terminal.shutdown())
         self._register_popout(dialog)
 
+    def _set_active_document(self, path: str | None) -> None:
+        if not path:
+            self.document_label.setText("Inicio del proyecto")
+            self.document_location.setText(Path(self.root_dir).name)
+            return
+
+        absolute = os.path.abspath(path)
+        self.document_label.setText(Path(absolute).name)
+
+        try:
+            parent = Path(absolute).parent.relative_to(self.root_dir)
+            location = (
+                Path(self.root_dir).name
+                if str(parent) == "."
+                else f"{Path(self.root_dir).name} / {parent.as_posix()}"
+            )
+        except ValueError:
+            location = str(Path(absolute).parent)
+
+        self.document_location.setText(location)
+        self.document_location.setToolTip(str(Path(absolute).parent))
+
+    def _location_changed(self, directory: str) -> None:
+        try:
+            relative = Path(directory).relative_to(self.root_dir)
+            label = (
+                Path(self.root_dir).name
+                if str(relative) == "."
+                else f"{Path(self.root_dir).name} / {relative.as_posix()}"
+            )
+        except ValueError:
+            label = directory
+
+        self._set_status_text(f"Nuevo se creará en: {label}")
+
+    def _set_status_text(self, text: str) -> None:
+        self.left_status.setText(text)
+
+    def _handle_new_requested(self, kind: str) -> None:
+        if kind == "notebook":
+            self._new_notebook()
+        elif kind == "folder":
+            self._new_folder()
+        elif kind == "file":
+            self._new_text_file()
+
+    def _current_creation_directory(self) -> str:
+        if hasattr(self, "file_explorer"):
+            return self.file_explorer.current_directory()
+        return self.root_dir
+
     def _go_home(self) -> None:
+        self._set_active_document(None)
         self.browser.setUrl(QUrl(self.manager.open_url_for_path()))
 
     def _open_path(self, path: str) -> None:
+        self.file_explorer.set_active_path(path)
+        self._set_active_document(path)
         self.browser.setUrl(QUrl(self.manager.open_url_for_path(path)))
 
     def _new_notebook(self) -> None:
+        directory = self._current_creation_directory()
+
         try:
-            path = self.manager.create_notebook(self.root_dir)
+            path = self.manager.create_notebook(directory)
+            self.file_explorer.refresh()
+            self.file_explorer.set_active_path(path)
             self._append_log(f"Notebook creado: {path}")
             self._open_path(path)
         except Exception as exc:
             QMessageBox.warning(
                 self,
                 "No se pudo crear el notebook",
+                str(exc),
+            )
+
+    def _new_folder(self) -> None:
+        directory = Path(self._current_creation_directory())
+
+        name, ok = QInputDialog.getText(
+            self,
+            "Nueva carpeta",
+            "Nombre de la carpeta:",
+        )
+        name = name.strip()
+
+        if not ok or not name:
+            return
+
+        if "/" in name or "\\" in name or name in {".", ".."}:
+            QMessageBox.warning(
+                self,
+                "Nombre no válido",
+                "Usa un nombre de carpeta simple, sin rutas.",
+            )
+            return
+
+        destination = directory / name
+
+        try:
+            destination.mkdir()
+            self.file_explorer.refresh()
+            self._append_log(f"Carpeta creada: {destination}")
+            self._set_status_text(f"Carpeta creada: {name}")
+        except FileExistsError:
+            QMessageBox.information(
+                self,
+                "La carpeta ya existe",
+                f"Ya existe una carpeta llamada {name}.",
+            )
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "No se pudo crear la carpeta",
+                str(exc),
+            )
+
+    def _new_text_file(self) -> None:
+        directory = Path(self._current_creation_directory())
+
+        name, ok = QInputDialog.getText(
+            self,
+            "Nuevo archivo",
+            "Nombre del archivo:",
+            text="notas.txt",
+        )
+        name = name.strip()
+
+        if not ok or not name:
+            return
+
+        if "/" in name or "\\" in name or name in {".", ".."}:
+            QMessageBox.warning(
+                self,
+                "Nombre no válido",
+                "Usa un nombre de archivo simple, sin rutas.",
+            )
+            return
+
+        destination = directory / name
+
+        if destination.exists():
+            QMessageBox.information(
+                self,
+                "El archivo ya existe",
+                f"Ya existe {name} en esa carpeta.",
+            )
+            return
+
+        try:
+            destination.write_text("", encoding="utf-8")
+            self.file_explorer.refresh()
+            self.file_explorer.set_active_path(str(destination))
+            self._append_log(f"Archivo creado: {destination}")
+
+            if destination.suffix.lower() in {
+                ".txt",
+                ".md",
+                ".py",
+                ".jl",
+                ".json",
+                ".yaml",
+                ".yml",
+                ".csv",
+            }:
+                self._open_path(str(destination))
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "No se pudo crear el archivo",
                 str(exc),
             )
 
@@ -634,6 +922,7 @@ class MainWindow(QMainWindow):
         self.active_kernel_name = ""
 
         self.file_explorer.set_root(self.root_dir)
+        self._set_active_document(None)
         self.variables_panel.set_variables([])
         self.terminal_panel.set_working_directory(self.root_dir)
 
