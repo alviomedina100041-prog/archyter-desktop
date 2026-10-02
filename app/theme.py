@@ -44,6 +44,22 @@ QFrame#PanelCard {
     border-radius: 9px;
 }
 
+QFrame#DocumentBar {
+    background-color: #f8fbff;
+    border: 1px solid #dce8f3;
+    border-radius: 8px;
+}
+
+QLabel#ActiveDocumentLabel {
+    color: #0f5f9e;
+    font-weight: 700;
+    font-size: 11px;
+}
+
+QLabel#AppIcon {
+    background: transparent;
+}
+
 QLabel {
     background-color: transparent;
     color: #172033;
@@ -73,12 +89,13 @@ QLabel#KernelName {
 }
 
 QLabel#ProjectChip {
-    background: #eef6ff;
-    color: #315f8d;
-    border: 1px solid #d4e7fb;
+    background: #eef7ff;
+    color: #0f5f9e;
+    border: 1px solid #cfe6f8;
     border-radius: 7px;
     padding: 5px 7px;
     font-size: 10px;
+    font-weight: 600;
 }
 
 QLabel#CountBadge {
@@ -131,9 +148,15 @@ QTreeView::item:hover {
 }
 
 QTreeView::item:selected {
-    background-color: #dff1ff;
+    background-color: #d8edff;
     color: #075985;
-    border-radius: 5px;
+    border: 1px solid #93c5fd;
+    border-radius: 6px;
+    font-weight: 700;
+}
+
+QTreeView::branch:selected {
+    background: transparent;
 }
 
 QPushButton {
@@ -160,6 +183,40 @@ QPushButton:disabled {
     background-color: #f8fafc;
     color: #a2adbc;
     border-color: #e5eaf0;
+}
+
+QToolButton {
+    background-color: #ffffff;
+    color: #263449;
+    border: 1px solid #d1dbe7;
+    border-radius: 7px;
+    padding: 5px 8px;
+    min-height: 20px;
+    font-weight: 500;
+}
+
+QToolButton:hover {
+    background-color: #f3f8ff;
+    color: #0b65bd;
+    border-color: #79b8f7;
+}
+
+QToolButton#ToolbarMenuButton {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+QToolButton#ExplorerToolButton {
+    background: #f8fafc;
+    border-color: #dde5ee;
+    padding: 3px;
+    min-width: 25px;
+    min-height: 23px;
+}
+
+QToolButton#ExplorerToolButton:hover {
+    background: #eaf5ff;
+    border-color: #93c5fd;
 }
 
 QPushButton#PrimaryButton {
@@ -347,6 +404,24 @@ QScrollBar::handle:horizontal:hover {
 QScrollBar::add-line:horizontal,
 QScrollBar::sub-line:horizontal {
     width: 0px;
+}
+
+QMenu {
+    background: #ffffff;
+    color: #263449;
+    border: 1px solid #d8e1ec;
+    border-radius: 8px;
+    padding: 5px;
+}
+
+QMenu::item {
+    padding: 7px 24px 7px 9px;
+    border-radius: 5px;
+}
+
+QMenu::item:selected {
+    background: #eaf5ff;
+    color: #0b65bd;
 }
 
 QToolTip {
