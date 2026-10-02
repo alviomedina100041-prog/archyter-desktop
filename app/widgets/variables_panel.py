@@ -6,10 +6,13 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QStyle,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
 )
+
+from ..icons import themed_icon
 
 
 class VariablesPanel(QFrame):
@@ -29,6 +32,12 @@ class VariablesPanel(QFrame):
         header.setSpacing(4)
 
         self.title_button = QPushButton("Variables")
+        self.title_button.setIcon(
+            themed_icon(
+                "view-list-details",
+                QStyle.StandardPixmap.SP_FileDialogDetailedView,
+            )
+        )
         self.title_button.setObjectName("PanelTitleButton")
         self.title_button.setToolTip("Abrir Variables en una ventana grande")
         self.title_button.clicked.connect(self.expand_requested.emit)
@@ -36,14 +45,26 @@ class VariablesPanel(QFrame):
         self.count_label = QLabel("0")
         self.count_label.setObjectName("CountBadge")
 
-        self.refresh_button = QPushButton("↻")
+        self.refresh_button = QPushButton()
+        self.refresh_button.setIcon(
+            themed_icon(
+                "view-refresh",
+                QStyle.StandardPixmap.SP_BrowserReload,
+            )
+        )
         self.refresh_button.setObjectName("IconButton")
         self.refresh_button.setToolTip("Actualizar variables")
         self.refresh_button.setFixedWidth(28)
         self.refresh_button.setFixedHeight(26)
         self.refresh_button.clicked.connect(self.refresh_requested.emit)
 
-        self.open_button = QPushButton("Abrir ↗")
+        self.open_button = QPushButton("Abrir")
+        self.open_button.setIcon(
+            themed_icon(
+                "window-new",
+                QStyle.StandardPixmap.SP_ArrowForward,
+            )
+        )
         self.open_button.setObjectName("PanelActionButton")
         self.open_button.clicked.connect(self.expand_requested.emit)
 
@@ -86,4 +107,4 @@ class VariablesPanel(QFrame):
 
     def set_refreshing(self, refreshing: bool) -> None:
         self.refresh_button.setEnabled(not refreshing)
-        self.refresh_button.setText("…" if refreshing else "↻")
+        self.refresh_button.setText("…" if refreshing else "")
