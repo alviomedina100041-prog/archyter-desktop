@@ -5,7 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from PySide6.QtGui import QColor
+from PySide6.QtCore import QRect
+from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
@@ -39,7 +40,38 @@ class ExplorerTests(unittest.TestCase):
                 self.assertTrue(panel.delete_button.isEnabled())
                 self.assertFalse(panel.delete_button.icon().isNull())
                 self.assertIsInstance(panel.tree, CleanProjectTree)
-                self.assertIsInstance(panel.tree.itemDelegate(), CleanTreeDelegate)
+                self.assertIsInstance(
+                    panel.tree.itemDelegate(),
+                    CleanTreeDelegate,
+                )
+
+                # A file has no branch chevron. Its gutter must still be
+                # explicitly repainted, otherwise Windows can leave a stale
+                # colored square beside the selected row.
+                branch_image = QImage(
+                    52,
+                    28,
+                    QImage.Format.Format_ARGB32,
+                )
+                branch_image.fill(QColor("#cc0000"))
+
+                branch_painter = QPainter(branch_image)
+                panel.tree.drawBranches(
+                    branch_painter,
+                    QRect(0, 0, 52, 28),
+                    panel.model.index(str(notebook)),
+                )
+                branch_painter.end()
+
+                expected = QColor("#fbfdff")
+                for y in range(branch_image.height()):
+                    for x in range(branch_image.width()):
+                        self.assertEqual(
+                            QColor.fromRgba(
+                                branch_image.pixel(x, y)
+                            ).name(),
+                            expected.name(),
+                        )
 
                 index = panel.model.index(str(notebook))
                 rect = panel.tree.visualRect(index)
