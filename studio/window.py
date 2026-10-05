@@ -346,6 +346,15 @@ class StudioWindow(QMainWindow):
         ))
 
     def _refresh_session(self) -> None:
+        if not self.active_document:
+            self.active_kernel_id = None
+            self.inspector.update_kernel(
+                "Python 3",
+                "sin sesión",
+                "Abre un notebook para iniciar.",
+            )
+            return
+
         try:
             session = self.manager.active_session(self.active_document)
         except Exception:
