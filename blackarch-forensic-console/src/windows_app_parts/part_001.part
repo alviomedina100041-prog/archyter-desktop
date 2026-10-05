@@ -1,0 +1,170 @@
+    fn GlobalUnlock(hMem: HANDLE) -> BOOL;
+    fn GlobalMemoryStatusEx(lpBuffer: *mut MEMORYSTATUSEX) -> BOOL;
+    fn GetSystemTimes(lpIdleTime: *mut FILETIME, lpKernelTime: *mut FILETIME, lpUserTime: *mut FILETIME) -> BOOL;
+    fn GetDiskFreeSpaceExW(lpDirectoryName: *const u16, lpFreeBytesAvailableToCaller: *mut u64,
+        lpTotalNumberOfBytes: *mut u64, lpTotalNumberOfFreeBytes: *mut u64) -> BOOL;
+}
+
+#[link(name = "shell32")]
+extern "system" {
+    fn DragAcceptFiles(hWnd: HWND, fAccept: BOOL);
+    fn DragQueryFileW(hDrop: HDROP, iFile: UINT, lpszFile: *mut u16, cch: UINT) -> UINT;
+    fn DragFinish(hDrop: HDROP);
+}
+
+#[link(name = "dwmapi")]
+extern "system" {
+    fn DwmSetWindowAttribute(hwnd: HWND, dwAttribute: DWORD, pvAttribute: *const c_void, cbAttribute: DWORD) -> i32;
+}
+
+const CS_HREDRAW: UINT = 0x0002;
+const CS_VREDRAW: UINT = 0x0001;
+const WS_OVERLAPPEDWINDOW: DWORD = 0x00CF0000;
+const CW_USEDEFAULT: i32 = 0x80000000u32 as i32;
+const SW_SHOWMAXIMIZED: i32 = 3;
+const WM_DESTROY: UINT = 0x0002;
+const WM_PAINT: UINT = 0x000F;
+const WM_CHAR: UINT = 0x0102;
+const WM_KEYDOWN: UINT = 0x0100;
+const WM_LBUTTONDOWN: UINT = 0x0201;
+const WM_MOUSEMOVE: UINT = 0x0200;
+const WM_TIMER: UINT = 0x0113;
+const WM_DROPFILES: UINT = 0x0233;
+const WM_SETICON: UINT = 0x0080;
+const WM_APP: UINT = 0x8000;
+const WM_APP_ASYNC: UINT = WM_APP + 11;
+const ICON_SMALL: WPARAM = 0;
+const ICON_BIG: WPARAM = 1;
+const IDC_ARROW: usize = 32512;
+const IMAGE_ICON: UINT = 1;
+const LR_LOADFROMFILE: UINT = 0x0010;
+const DI_NORMAL: UINT = 0x0003;
+const SRCCOPY: DWORD = 0x00CC0020;
+const PS_SOLID: i32 = 0;
+const TRANSPARENT: i32 = 1;
+const DT_LEFT: UINT = 0x0000;
+const DT_CENTER: UINT = 0x0001;
+const DT_RIGHT: UINT = 0x0002;
+const DT_VCENTER: UINT = 0x0004;
+const DT_SINGLELINE: UINT = 0x0020;
+const DT_END_ELLIPSIS: UINT = 0x00008000;
+const DT_NOPREFIX: UINT = 0x00000800;
+const FW_NORMAL: i32 = 400;
+const FW_SEMIBOLD: i32 = 600;
+const FW_BOLD: i32 = 700;
+const DEFAULT_CHARSET: DWORD = 1;
+const CLEARTYPE_QUALITY: DWORD = 5;
+const DEFAULT_PITCH: DWORD = 0;
+const FF_DONTCARE: DWORD = 0;
+const WHITE_BRUSH: i32 = 0;
+const NULL_BRUSH: i32 = 5;
+const DC_BRUSH: i32 = 18;
+const DC_PEN: i32 = 19;
+const CF_UNICODETEXT: UINT = 13;
+const VK_CONTROL: i32 = 0x11;
+const MB_OK: UINT = 0x00000000;
+const MB_ICONINFORMATION: UINT = 0x00000040;
+
+fn rgb(r: u8, g: u8, b: u8) -> COLORREF { r as u32 | ((g as u32) << 8) | ((b as u32) << 16) }
+fn wide(s: &str) -> Vec<u16> { s.encode_utf16().chain(std::iter::once(0)).collect() }
+fn loword(v: LPARAM) -> i32 { (v as u32 & 0xffff) as i16 as i32 }
+fn hiword(v: LPARAM) -> i32 { ((v as u32 >> 16) & 0xffff) as i16 as i32 }
+fn filetime_u64(v: FILETIME) -> u64 { ((v.dwHighDateTime as u64) << 32) | v.dwLowDateTime as u64 }
+
+#[derive(Clone, Copy)]
+struct R { x: i32, y: i32, w: i32, h: i32 }
+impl R {
+    fn right(self) -> i32 { self.x + self.w }
+    fn bottom(self) -> i32 { self.y + self.h }
+    fn contains(self, x: i32, y: i32) -> bool { x >= self.x && x < self.right() && y >= self.y && y < self.bottom() }
+    fn inset(self, d: i32) -> Self { Self { x: self.x + d, y: self.y + d, w: self.w - d * 2, h: self.h - d * 2 } }
+    fn rect(self) -> RECT { RECT { left: self.x, top: self.y, right: self.right(), bottom: self.bottom() } }
+}
+
+#[derive(Clone, Copy)]
+struct Theme {
+    bg: COLORREF,
+    panel: COLORREF,
+    panel2: COLORREF,
+    panel3: COLORREF,
+    border: COLORREF,
+    border_soft: COLORREF,
+    text: COLORREF,
+    muted: COLORREF,
+    faint: COLORREF,
+    green: COLORREF,
+    cyan: COLORREF,
+    red: COLORREF,
+    orange: COLORREF,
+    yellow: COLORREF,
+    blue: COLORREF,
+}
+impl Default for Theme {
+    fn default() -> Self {
+        Self {
+            bg: rgb(4, 12, 16), panel: rgb(7, 18, 23), panel2: rgb(9, 23, 29), panel3: rgb(12, 29, 36),
+            border: rgb(26, 48, 57), border_soft: rgb(17, 37, 45), text: rgb(222, 233, 238), muted: rgb(154, 171, 180),
+            faint: rgb(95, 116, 125), green: rgb(0, 231, 118), cyan: rgb(0, 206, 230), red: rgb(255, 50, 74),
+            orange: rgb(255, 112, 24), yellow: rgb(247, 205, 30), blue: rgb(53, 151, 255),
+        }
+    }
+}
+
+struct UiResources {
+    font_ui: HFONT,
+    font_ui_small: HFONT,
+    font_ui_big: HFONT,
+    font_mono: HFONT,
+    font_mono_small: HFONT,
+    icon: HICON,
+}
+impl UiResources {
+    unsafe fn create() -> Self {
+        fn font(face: &str, px: i32, weight: i32) -> HFONT {
+            let face = wide(face);
+            unsafe { CreateFontW(-px, 0, 0, 0, weight, 0, 0, 0, DEFAULT_CHARSET, 0, 0, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, face.as_ptr()) }
+        }
+        Self {
+            font_ui: font("Segoe UI", 15, FW_NORMAL),
+            font_ui_small: font("Segoe UI", 13, FW_NORMAL),
+            font_ui_big: font("Segoe UI", 21, FW_SEMIBOLD),
+            font_mono: font("Cascadia Mono", 14, FW_NORMAL),
+            font_mono_small: font("Cascadia Mono", 12, FW_NORMAL),
+            icon: null_mut(),
+        }
+    }
+    unsafe fn destroy(&mut self) {
+        for h in [self.font_ui, self.font_ui_small, self.font_ui_big, self.font_mono, self.font_mono_small] {
+            if !h.is_null() { DeleteObject(h); }
+        }
+        if !self.icon.is_null() { DeleteObject(self.icon); }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum NavItem { Dashboard, Cases, Evidence, DiskImages, Memory, Network, PostgreSql, Logs, Reports, Settings }
+impl NavItem {
+    const ALL: [NavItem; 10] = [Self::Dashboard, Self::Cases, Self::Evidence, Self::DiskImages, Self::Memory, Self::Network, Self::PostgreSql, Self::Logs, Self::Reports, Self::Settings];
+    fn label(self) -> &'static str {
+        match self {
+            Self::Dashboard => "Dashboard", Self::Cases => "Cases", Self::Evidence => "Evidence", Self::DiskImages => "Disk Images",
+            Self::Memory => "Memory Analysis", Self::Network => "Network Analysis", Self::PostgreSql => "PostgreSQL Audit",
+            Self::Logs => "Logs", Self::Reports => "Reports", Self::Settings => "Settings",
+        }
+    }
+}
+
+#[derive(Default, Clone, Copy)]
+struct SystemStats {
+    cpu_percent: u32,
+    memory_used_gb_x10: u32,
+    memory_total_gb_x10: u32,
+    disk_used_percent: u32,
+    prev_idle: u64,
+    prev_kernel: u64,
+    prev_user: u64,
+}
+
+struct AppState {
+    hwnd: HWND,
+    theme: Theme,
