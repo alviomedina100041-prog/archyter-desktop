@@ -39,6 +39,10 @@ try {
     $VenvPython = Join-Path $Staging ".venv\Scripts\python.exe"
     & $VenvPython -m pip install --upgrade pip
     & $VenvPython -m pip install -r requirements-windows.txt
+
+    $IconSvg = Join-Path $Staging "assets\icon.svg"
+    $IconIco = Join-Path $Staging "ArchyterStudio.ico"
+    & $VenvPython (Join-Path $Staging "scripts\build_windows_icon.py") $IconSvg $IconIco
 } finally {
     Pop-Location
 }
@@ -61,6 +65,7 @@ $Shortcut.Arguments = "-m studio.main"
 $Shortcut.WorkingDirectory = $InstallDir
 $Shortcut.Description = "Archyter Studio - Jupyter Desktop IDE"
 $Shortcut.WindowStyle = 1
+$Shortcut.IconLocation = "$InstallDir\ArchyterStudio.ico,0"
 $Shortcut.Save()
 
 Write-Host ""
