@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   CaseRecord,
   FileEntry,
+  HexChunk,
   VerificationResult,
   WslStatus,
 } from "./types";
@@ -14,6 +15,8 @@ export const api = {
   verifyEvidence: (caseId: string, evidenceId: string) =>
     invoke<VerificationResult>("verify_evidence", { caseId, evidenceId }),
   listDir: (path: string) => invoke<FileEntry[]>("list_dir", { path }),
+  readHexChunk: (path: string, offset: number, length = 256) =>
+    invoke<HexChunk>("read_hex_chunk", { path, offset, length }),
   probeWsl: (distro: string) =>
     invoke<WslStatus>("probe_wsl_status", { distro }),
   forensicTools: (distro: string) =>
