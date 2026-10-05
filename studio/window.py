@@ -1162,12 +1162,18 @@ class StudioWindow(QMainWindow):
         if mode == "compact":
             left = 210
             right = 265
+            self.kernel_button.setText("Kernel ↻")
+            self.reload_button.setText("Recargar")
         elif mode == "medium":
             left = 230
             right = 285
+            self.kernel_button.setText("Reiniciar kernel")
+            self.reload_button.setText("Recargar todo")
         else:
             left = 255
             right = 320
+            self.kernel_button.setText("Reiniciar kernel")
+            self.reload_button.setText("Recargar todo")
 
         center = max(
             420,
