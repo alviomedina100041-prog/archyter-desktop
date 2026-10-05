@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QMenu,
     QScrollArea,
     QSizePolicy,
     QToolButton,
@@ -132,12 +133,30 @@ class NotebookCell(QFrame):
         self.add_button.setToolTip(
             "Agregar celda de código debajo"
         )
-        self.add_button.clicked.connect(
+        self.add_button.setPopupMode(
+            QToolButton.ToolButtonPopupMode.InstantPopup
+        )
+        add_menu = QMenu(self.add_button)
+        add_code = add_menu.addAction(
+            icon("run"),
+            "Código debajo",
+        )
+        add_markdown = add_menu.addAction(
+            "Markdown debajo",
+        )
+        add_code.triggered.connect(
             lambda: self.insert_below_requested.emit(
                 self.cell_id,
                 "code",
             )
         )
+        add_markdown.triggered.connect(
+            lambda: self.insert_below_requested.emit(
+                self.cell_id,
+                "markdown",
+            )
+        )
+        self.add_button.setMenu(add_menu)
         header.addWidget(self.add_button)
 
         self.delete_button = QToolButton()
@@ -156,6 +175,13 @@ class NotebookCell(QFrame):
         header.addWidget(self.delete_button)
 
         root.addLayout(header)
+
+        for action_button in (
+            self.run_button,
+            self.add_button,
+            self.delete_button,
+        ):
+            action_button.setVisible(False)
 
         self.editor = AutoHeightPlainTextEdit(
             minimum_lines=2,
@@ -272,6 +298,14 @@ class NotebookCell(QFrame):
             "active",
             active,
         )
+
+        self.run_button.setVisible(
+            active
+            and self.cell_type == "code"
+        )
+        self.add_button.setVisible(active)
+        self.delete_button.setVisible(active)
+
         self.style().unpolish(self)
         self.style().polish(self)
 
