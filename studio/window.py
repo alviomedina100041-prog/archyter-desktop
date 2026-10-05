@@ -31,7 +31,7 @@ from PySide6.QtWidgets import (
 
 from .animated import AnimatedPushButton, AnimatedToolButton, add_soft_shadow
 from .explorer import ExplorerPanel
-from .icons import app_icon, icon
+from .icons import app_icon, asset_pixmap, icon
 from .inspector import InspectorPanel
 from .native_kernel import NativeKernelController
 from .native_notebook import NativeNotebookEditor
@@ -129,11 +129,18 @@ class StudioWindow(QMainWindow):
         layout.setContentsMargins(12, 7, 12, 7)
         layout.setSpacing(7)
 
-        logo = QLabel()
-        logo.setPixmap(app_icon().pixmap(30, 30))
-        logo.setFixedSize(34, 34)
-        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(logo)
+        self.app_logo = QLabel()
+        self.app_logo.setPixmap(
+            asset_pixmap("app", 34)
+        )
+        self.app_logo.setFixedSize(38, 38)
+        self.app_logo.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.app_logo.setToolTip(
+            "Archyter Studio"
+        )
+        layout.addWidget(self.app_logo)
 
         title = QLabel("Archyter Studio")
         title.setObjectName("AppTitle")
