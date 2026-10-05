@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="480" viewBox="0 0 1280 480">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f7fbff"/><stop offset="1" stop-color="#dbeafe"/></linearGradient>
+  <linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0ea5e9"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+  <filter id="s"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-opacity=".16"/></filter>
+</defs>
+<rect width="1280" height="480" rx="28" fill="url(#bg)"/>
+<g transform="translate(58 54)">
+  <path d="M48 0 96 102H74L63 76H33L22 102H0L48 0Zm0 36-10 24h20L48 36Z" fill="url(#a)"/>
+  <text x="126" y="45" font-family="Segoe UI,Arial,sans-serif" font-size="38" font-weight="700" fill="#0f172a">Archyter Desktop</text>
+  <text x="126" y="80" font-family="Segoe UI,Arial,sans-serif" font-size="20" fill="#475569">main · Arch Linux · Jupyter Desktop Workspace</text>
+</g>
+<g filter="url(#s)" transform="translate(58 176)">
+  <rect width="1164" height="245" rx="20" fill="#ffffff" stroke="#bfdbfe"/>
+  <rect width="1164" height="42" rx="20" fill="#eff6ff"/>
+  <circle cx="24" cy="21" r="5" fill="#60a5fa"/><circle cx="42" cy="21" r="5" fill="#93c5fd"/><circle cx="60" cy="21" r="5" fill="#bfdbfe"/>
+  <rect x="24" y="68" width="220" height="148" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="42" y="98" font-family="Segoe UI,Arial" font-size="17" font-weight="700" fill="#334155">Mis cuadernos</text>
+  <text x="42" y="130" font-family="Segoe UI,Arial" font-size="15" fill="#64748b">analisis.ipynb</text>
+  <text x="42" y="158" font-family="Segoe UI,Arial" font-size="15" fill="#64748b">metodos.ipynb</text>
+  <text x="42" y="186" font-family="Segoe UI,Arial" font-size="15" fill="#64748b">proyecto.ipynb</text>
+  <rect x="266" y="68" width="620" height="148" rx="12" fill="#0f172a"/>
+  <text x="288" y="99" font-family="Consolas,monospace" font-size="15" fill="#7dd3fc">In [1]: import pandas as pd</text>
+  <text x="288" y="126" font-family="Consolas,monospace" font-size="15" fill="#c4b5fd">        import matplotlib.pyplot as plt</text>
+  <text x="288" y="164" font-family="Consolas,monospace" font-size="15" fill="#86efac">        # notebook listo para trabajar</text>
+  <rect x="910" y="68" width="230" height="148" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="930" y="98" font-family="Segoe UI,Arial" font-size="16" font-weight="700" fill="#334155">Kernel</text>
+  <circle cx="934" cy="126" r="6" fill="#22c55e"/><text x="950" y="132" font-family="Segoe UI,Arial" font-size="14" fill="#475569">Python · idle</text>
+  <text x="930" y="166" font-family="Segoe UI,Arial" font-size="14" fill="#475569">Variables · Terminal</text>
+  <text x="930" y="191" font-family="Segoe UI,Arial" font-size="14" fill="#475569">Logs · JupyterLab</text>
+</g>
+</svg>
