@@ -13,6 +13,7 @@ import {
   File,
   FileCheck2,
   FileClock,
+  FileDown,
   Folder,
   FolderOpen,
   Gauge,
@@ -269,6 +270,22 @@ export default function App() {
           ? "Integrity verified: SHA-256 matches."
           : "INTEGRITY ALERT: evidence hash changed.",
       );
+    } catch (reason) {
+      setNotice(String(reason));
+    } finally {
+      setBusy("");
+    }
+  };
+
+  const exportReport = async () => {
+    if (!activeCase) {
+      setNotice("Create or select a case before exporting a report.");
+      return;
+    }
+    setBusy("Generating case report…");
+    try {
+      const path = await api.exportCaseReport(activeCase.id);
+      setNotice(`Report written to ${path}`);
     } catch (reason) {
       setNotice(String(reason));
     } finally {
@@ -551,7 +568,18 @@ export default function App() {
                 <FileClock size={16} />
                 <span>Chain of Custody / Timeline</span>
               </div>
-              <span className="muted">{activeCase?.timeline.length ?? 0} events</span>
+              <div className="heading-actions">
+                <span className="muted">{activeCase?.timeline.length ?? 0} events</span>
+                <button
+                  className="mini-button"
+                  disabled={!activeCase || Boolean(busy)}
+                  onClick={() => void exportReport()}
+                  title="Export Markdown case report"
+                >
+                  <FileDown size={13} />
+                  Export report
+                </button>
+              </div>
             </div>
             <div className="timeline-list">
               {activeCase?.timeline
