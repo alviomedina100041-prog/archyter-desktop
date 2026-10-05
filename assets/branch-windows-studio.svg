@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="480" viewBox="0 0 1280 480">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#07162f"/><stop offset=".55" stop-color="#0b2b55"/><stop offset="1" stop-color="#0ea5e9"/></linearGradient>
+  <filter id="s"><feDropShadow dx="0" dy="10" stdDeviation="14" flood-opacity=".35"/></filter>
+</defs>
+<rect width="1280" height="480" rx="28" fill="url(#bg)"/>
+<g transform="translate(60 50)">
+  <g fill="#60a5fa"><rect width="35" height="35"/><rect x="42" width="35" height="35"/><rect y="42" width="35" height="35"/><rect x="42" y="42" width="35" height="35"/></g>
+  <text x="110" y="38" font-family="Segoe UI,Arial" font-size="38" font-weight="700" fill="#fff">Archyter Studio</text>
+  <text x="110" y="73" font-family="Segoe UI,Arial" font-size="20" fill="#bae6fd">windows-studio · Windows 10/11 · Jupyter IDE</text>
+</g>
+<g filter="url(#s)" transform="translate(60 160)">
+  <rect width="1160" height="270" rx="20" fill="#f8fafc"/>
+  <rect width="1160" height="42" rx="20" fill="#e0f2fe"/>
+  <text x="22" y="27" font-family="Segoe UI,Arial" font-size="14" font-weight="700" fill="#075985">ARCHYTER STUDIO</text>
+  <rect x="20" y="62" width="72" height="184" rx="12" fill="#0f172a"/>
+  <g fill="#38bdf8"><circle cx="56" cy="92" r="8"/><rect x="47" y="120" width="18" height="18" rx="4"/><rect x="47" y="156" width="18" height="18" rx="4"/></g>
+  <rect x="108" y="62" width="250" height="184" rx="12" fill="#fff" stroke="#cbd5e1"/>
+  <text x="128" y="92" font-family="Segoe UI,Arial" font-size="16" font-weight="700" fill="#1e293b">Project Explorer</text>
+  <text x="128" y="125" font-family="Segoe UI,Arial" font-size="14" fill="#64748b">DataScience.ipynb</text>
+  <text x="128" y="153" font-family="Segoe UI,Arial" font-size="14" fill="#64748b">Proyecto.ipynb</text>
+  <text x="128" y="181" font-family="Segoe UI,Arial" font-size="14" fill="#64748b">notas.md</text>
+  <rect x="374" y="62" width="508" height="184" rx="12" fill="#ffffff" stroke="#cbd5e1"/>
+  <rect x="394" y="82" width="468" height="34" rx="8" fill="#eff6ff"/>
+  <text x="410" y="104" font-family="Segoe UI,Arial" font-size="14" fill="#2563eb">Editor · Variables · Terminal · Logs</text>
+  <text x="398" y="148" font-family="Consolas,monospace" font-size="14" fill="#7c3aed">import numpy as np</text>
+  <text x="398" y="176" font-family="Consolas,monospace" font-size="14" fill="#0f766e">print("Windows-native notebook workspace")</text>
+  <rect x="898" y="62" width="242" height="184" rx="12" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="918" y="92" font-family="Segoe UI,Arial" font-size="16" font-weight="700" fill="#1e293b">Inspector</text>
+  <circle cx="922" cy="122" r="6" fill="#22c55e"/><text x="938" y="128" font-family="Segoe UI,Arial" font-size="14" fill="#475569">Jupyter local</text>
+  <text x="918" y="164" font-family="Segoe UI,Arial" font-size="14" fill="#475569">PowerShell integrado</text>
+  <text x="918" y="192" font-family="Segoe UI,Arial" font-size="14" fill="#475569">Recycle Bin seguro</text>
+</g>
+</svg>
