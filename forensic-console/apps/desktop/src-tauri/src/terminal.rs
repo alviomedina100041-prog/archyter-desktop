@@ -1,4 +1,4 @@
-use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize, PtySystem};
+use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 use std::{
     io::{Read, Write},
     sync::{Arc, Mutex},
@@ -145,17 +145,22 @@ pub fn terminal_resize(
         .ok_or_else(|| "terminal is not running".to_string())?;
     drop(slot);
 
-    session
-        .master
-        .lock()
-        .map_err(|_| "terminal master poisoned")?
-        .resize(PtySize {
-            rows: rows.max(2),
-            cols: cols.max(2),
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|error| error.to_string())
+    let resize_result = {
+        let master = session
+            .master
+            .lock()
+            .map_err(|_| "terminal master poisoned")?;
+        master
+            .resize(PtySize {
+                rows: rows.max(2),
+                cols: cols.max(2),
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|error| error.to_string())
+    };
+
+    resize_result
 }
 
 #[tauri::command]
