@@ -839,15 +839,11 @@ class NativeNotebookEditor(QFrame):
         self,
         busy: bool,
     ) -> None:
+        # Execution happens in the kernel process, not the Qt UI. Keep cell
+        # creation/editing available while Python is busy; only prevent a
+        # second execution from the same cell.
         for cell in self.cells:
             cell.set_busy(busy)
-
-        self.add_code_button.setEnabled(
-            not busy
-        )
-        self.add_markdown_button.setEnabled(
-            not busy
-        )
 
     def clear_outputs(self) -> None:
         for cell in self.cells:
