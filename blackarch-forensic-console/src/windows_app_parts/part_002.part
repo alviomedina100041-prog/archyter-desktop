@@ -1,0 +1,170 @@
+    ui: UiResources,
+    nav: NavItem,
+    active_tab: usize,
+    hover_nav: Option<usize>,
+    terminal_focus: bool,
+    terminal_lines: VecDeque<String>,
+    command_input: String,
+    busy_jobs: usize,
+    case: CaseData,
+    selected_evidence: usize,
+    status: String,
+    distro: String,
+    wsl_online: bool,
+    tools_installed: u32,
+    stats: SystemStats,
+    resource_history: VecDeque<u32>,
+}
+
+impl AppState {
+    unsafe fn new() -> Self {
+        let mut terminal_lines = VecDeque::new();
+        for line in [
+            "blackarch@wsl2 ~ $ uname -a",
+            "Linux blackarch-wsl2 6.6.52-arch1-1 #1 SMP PREEMPT_DYNAMIC x86_64 GNU/Linux",
+            "blackarch@wsl2 ~ $ neofetch --ascii_distro arch",
+            "                /\\                 blackarch@wsl2",
+            "               /  \\                OS: Arch Linux (BlackArch) on WSL2",
+            "              / /\\ \\               Kernel: WSL2",
+            "             / ____ \\              Shell: bash",
+            "blackarch@wsl2 ~ $ pacman -Qg blackarch-forensic | wc -l",
+            "163",
+            "blackarch@wsl2 ~ $ sha256sum /mnt/evidence/disk01.E01",
+            "3f4a6d7e8c9b2a1d0e5c7f9a3b6d8e2f41c7e9a8d3b6f4c1e9d0a7b3c5d9e2f11  /mnt/evidence/disk01.E01",
+            "blackarch@wsl2 ~ $ psql -h 127.0.0.1 -U auditor -d erp",
+            "erp=# \\du",
+            " Role name | Attributes                        | Member of",
+            " auditor   | Superuser, Create role, Create DB | {}",
+            " erp_app   |                                   | {}",
+            " readonly  |                                   | {}",
+            " db_admin  | Superuser                         | {}",
+            " etl_user  |                                   | {erp_app}",
+            "blackarch@wsl2 ~/Projects/erp_project_backend $",
+        ] { terminal_lines.push_back(line.to_string()); }
+        Self {
+            hwnd: null_mut(), theme: Theme::default(), ui: UiResources::create(), nav: NavItem::Dashboard, active_tab: 0,
+            hover_nav: None, terminal_focus: true, terminal_lines, command_input: String::new(), busy_jobs: 0,
+            case: CaseData::demo(), selected_evidence: 0, status: "Ready".into(), distro: "archlinux".into(),
+            wsl_online: true, tools_installed: 163, stats: SystemStats::default(), resource_history: VecDeque::from(vec![12,15,11,19,23,13,18,17,28,16,14,22,12,10]),
+        }
+    }
+
+    fn push_terminal(&mut self, text: impl AsRef<str>) {
+        for line in text.as_ref().replace("\r\n", "\n").split('\n') {
+            if self.terminal_lines.len() >= 220 { self.terminal_lines.pop_front(); }
+            self.terminal_lines.push_back(line.to_string());
+        }
+    }
+
+    fn current_evidence(&self) -> Option<&Evidence> { self.case.evidence.get(self.selected_evidence) }
+}
+
+static mut APP: *mut AppState = null_mut();
+
+enum AsyncPayload {
+    Terminal { command: String, result: Result<wsl::CommandResult, String> },
+    Probe { result: Result<wsl::CommandResult, String> },
+    Hash { index: usize, result: Result<String, String> },
+    Postgres { result: Result<postgres::PgAuditResult, String> },
+    Scan { root: PathBuf, result: Result<project_scan::ProjectScanResult, String> },
+}
+
+pub fn run() -> Result<(), String> {
+    unsafe {
+        // Windows 11: keep GDI geometry crisp on HiDPI / fractional scaling.
+        let _ = SetProcessDpiAwarenessContext((-4isize) as HANDLE); // PER_MONITOR_AWARE_V2
+        let hinstance = GetModuleHandleW(null());
+        if hinstance.is_null() { return Err("GetModuleHandleW failed".into()); }
+        let class_name = wide("BlackArchForensicConsoleWindow");
+        let cursor = LoadCursorW(null_mut(), IDC_ARROW as *const u16);
+        let class = WNDCLASSW {
+            style: CS_HREDRAW | CS_VREDRAW,
+            lpfnWndProc: Some(wndproc),
+            cbClsExtra: 0, cbWndExtra: 0, hInstance: hinstance,
+            hIcon: null_mut(), hCursor: cursor, hbrBackground: null_mut(), lpszMenuName: null(), lpszClassName: class_name.as_ptr(),
+        };
+        if RegisterClassW(&class) == 0 { return Err("RegisterClassW failed".into()); }
+
+        let title = wide("BLACKARCH FORENSIC CONSOLE | WSL2 DFIR Workspace");
+        let hwnd = CreateWindowExW(0, class_name.as_ptr(), title.as_ptr(), WS_OVERLAPPEDWINDOW,
+            CW_USEDEFAULT, CW_USEDEFAULT, 1600, 900, null_mut(), null_mut(), hinstance, null_mut());
+        if hwnd.is_null() { return Err("CreateWindowExW failed".into()); }
+
+        let mut state = Box::new(AppState::new());
+        state.hwnd = hwnd;
+        load_app_icon(&mut state);
+        APP = Box::into_raw(state);
+
+        let dark: i32 = 1;
+        let _ = DwmSetWindowAttribute(hwnd, 20, &dark as *const _ as *const c_void, size_of::<i32>() as u32);
+        DragAcceptFiles(hwnd, 1);
+        SetTimer(hwnd, 1, 1000, null_mut());
+        ShowWindow(hwnd, SW_SHOWMAXIMIZED);
+        UpdateWindow(hwnd);
+        start_probe();
+        update_system_stats(&mut *APP);
+
+        let mut msg: MSG = zeroed();
+        while GetMessageW(&mut msg, null_mut(), 0, 0) > 0 {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        Ok(())
+    }
+}
+
+unsafe fn load_app_icon(state: &mut AppState) {
+    let candidates = [
+        env::current_exe().ok().and_then(|p| p.parent().map(|d| d.join("assets").join("blackarch.ico"))),
+        Some(PathBuf::from("assets\\blackarch.ico")),
+    ];
+    for path in candidates.into_iter().flatten() {
+        if path.exists() {
+            let w = wide(&path.to_string_lossy());
+            let icon = LoadImageW(null_mut(), w.as_ptr(), IMAGE_ICON, 0, 0, LR_LOADFROMFILE) as HICON;
+            if !icon.is_null() {
+                state.ui.icon = icon;
+                SendMessageW(state.hwnd, WM_SETICON, ICON_BIG, icon as LPARAM);
+                SendMessageW(state.hwnd, WM_SETICON, ICON_SMALL, icon as LPARAM);
+                break;
+            }
+        }
+    }
+}
+
+unsafe extern "system" fn wndproc(hwnd: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if msg == WM_DESTROY {
+        KillTimer(hwnd, 1);
+        if !APP.is_null() {
+            let mut boxed = Box::from_raw(APP);
+            boxed.ui.destroy();
+            APP = null_mut();
+        }
+        PostQuitMessage(0);
+        return 0;
+    }
+    if APP.is_null() { return DefWindowProcW(hwnd, msg, wparam, lparam); }
+    let state = &mut *APP;
+
+    match msg {
+        WM_PAINT => { paint(hwnd, state); 0 }
+        WM_TIMER => {
+            update_system_stats(state);
+            state.resource_history.push_back(state.stats.cpu_percent.min(100));
+            while state.resource_history.len() > 22 { state.resource_history.pop_front(); }
+            InvalidateRect(hwnd, null(), 0);
+            0
+        }
+        WM_MOUSEMOVE => {
+            let x = loword(lparam); let y = hiword(lparam);
+            let new_hover = sidebar_hit_index(x, y);
+            if state.hover_nav != new_hover { state.hover_nav = new_hover; InvalidateRect(hwnd, null(), 0); }
+            0
+        }
+        WM_LBUTTONDOWN => {
+            let x = loword(lparam); let y = hiword(lparam);
+            handle_click(state, x, y);
+            InvalidateRect(hwnd, null(), 0);
+            0
+        }
+        WM_CHAR => {
