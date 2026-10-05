@@ -11,6 +11,7 @@ from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -27,11 +28,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from .animated import AnimatedPushButton, AnimatedToolButton, add_soft_shadow
 from .explorer import ExplorerPanel
 from .icons import app_icon, icon
 from .inspector import InspectorPanel
 from .jupyter_manager import JupyterManager
+from .terminal import TerminalCard
 from .theme import APP_STYLE
+from .windows_chrome import apply_light_titlebar
 
 
 class StudioWebPage(QWebEnginePage):
@@ -88,8 +92,9 @@ class StudioWindow(QMainWindow):
         self.splitter.setHandleWidth(3)
 
         self.explorer = ExplorerPanel(self.root_dir)
-        self.explorer.setMinimumWidth(235)
-        self.explorer.setMaximumWidth(315)
+        self.explorer.setMinimumWidth(240)
+        self.explorer.setMaximumWidth(320)
+        add_soft_shadow(self.explorer, blur=16, y_offset=2, alpha=18)
         self.explorer.file_open_requested.connect(self._open_file)
         self.explorer.project_requested.connect(self._switch_project)
         self.explorer.new_requested.connect(self._handle_new)
@@ -101,16 +106,21 @@ class StudioWindow(QMainWindow):
         self.splitter.addWidget(self._build_editor())
 
         self.inspector = InspectorPanel(self.root_dir)
-        self.inspector.setMinimumWidth(290)
-        self.inspector.setMaximumWidth(360)
+        self.inspector.setMinimumWidth(300)
+        self.inspector.setMaximumWidth(370)
         self.inspector.refresh_variables.connect(self._refresh_variables)
         self.inspector.restart_kernel.connect(self._restart_kernel)
+        self.inspector.stop_kernel.connect(self._stop_kernel)
+        self.inspector.kernel_menu_requested.connect(self._show_kernel_details)
+        self.inspector.terminal_expand_requested.connect(
+            self._open_terminal_window
+        )
         self.splitter.addWidget(self.inspector)
 
         self.splitter.setStretchFactor(0, 0)
         self.splitter.setStretchFactor(1, 1)
         self.splitter.setStretchFactor(2, 0)
-        self.splitter.setSizes([260, 880, 315])
+        self.splitter.setSizes([255, 900, 320])
 
         content.addWidget(self.splitter, 1)
         root.addLayout(content, 1)
@@ -120,7 +130,8 @@ class StudioWindow(QMainWindow):
     def _build_topbar(self) -> QFrame:
         bar = QFrame()
         bar.setObjectName("TopBar")
-        bar.setFixedHeight(58)
+        bar.setFixedHeight(60)
+        add_soft_shadow(bar, blur=18, y_offset=2, alpha=19)
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(12, 7, 12, 7)
         layout.setSpacing(7)
@@ -136,7 +147,7 @@ class StudioWindow(QMainWindow):
         layout.addWidget(title)
         layout.addSpacing(18)
 
-        self.new_button = QToolButton()
+        self.new_button = AnimatedToolButton(base_icon=17, hover_icon=19)
         self.new_button.setText("Nuevo")
         self.new_button.setIcon(icon("add"))
         self.new_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -151,45 +162,45 @@ class StudioWindow(QMainWindow):
         self.new_button.setMenu(menu)
         layout.addWidget(self.new_button)
 
-        self.save_button = QPushButton("Guardar")
+        self.save_button = AnimatedPushButton("Guardar")
         self.save_button.setIcon(icon("save"))
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self._save)
         layout.addWidget(self.save_button)
 
-        self.run_button = QPushButton("Ejecutar")
+        self.run_button = AnimatedPushButton("Ejecutar")
         self.run_button.setObjectName("Primary")
         self.run_button.setIcon(icon("play", QStyle.StandardPixmap.SP_MediaPlay))
         self.run_button.setEnabled(False)
         self.run_button.clicked.connect(self._run_cell)
         layout.addWidget(self.run_button)
 
-        self.kernel_button = QPushButton("Kernel")
+        self.kernel_button = AnimatedPushButton("Kernel")
         self.kernel_button.setIcon(icon("refresh"))
         self.kernel_button.setToolTip("Reiniciar el kernel activo")
         self.kernel_button.clicked.connect(self._restart_kernel)
         layout.addWidget(self.kernel_button)
 
-        terminal = QPushButton("Terminal")
+        terminal = AnimatedPushButton("Terminal")
         terminal.setIcon(icon("terminal"))
         terminal.clicked.connect(self._focus_terminal)
         layout.addWidget(terminal)
 
-        project = QPushButton("Proyecto")
+        project = AnimatedPushButton("Proyecto")
         project.setIcon(icon("project"))
         project.clicked.connect(self._choose_project)
         layout.addWidget(project)
 
         layout.addStretch(1)
 
-        search = QToolButton()
+        search = AnimatedToolButton(base_icon=18, hover_icon=20)
         search.setObjectName("IconButton")
         search.setIcon(icon("search"))
         search.setToolTip("Buscar en el proyecto")
         search.clicked.connect(self._search_project)
         layout.addWidget(search)
 
-        settings = QToolButton()
+        settings = AnimatedToolButton(base_icon=18, hover_icon=20)
         settings.setObjectName("IconButton")
         settings.setIcon(icon("settings"))
         settings.setToolTip("Configuración de Archyter Studio")
@@ -215,7 +226,7 @@ class StudioWindow(QMainWindow):
         ]
 
         for name, tooltip, active in entries:
-            button = QToolButton()
+            button = AnimatedToolButton(base_icon=20, hover_icon=22)
             button.setObjectName("NavButton")
             button.setIcon(icon(name))
             button.setIconSize(button.iconSize() * 1.15)
@@ -239,38 +250,75 @@ class StudioWindow(QMainWindow):
     def _build_editor(self) -> QFrame:
         frame = QFrame()
         frame.setObjectName("EditorFrame")
+        add_soft_shadow(frame, blur=18, y_offset=2, alpha=18)
+
         layout = QVBoxLayout(frame)
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(5)
 
         document = QFrame()
         document.setObjectName("DocumentBar")
-        document.setFixedHeight(35)
+        document.setFixedHeight(38)
+
         row = QHBoxLayout(document)
-        row.setContentsMargins(9, 3, 9, 3)
-        row.setSpacing(6)
+        row.setContentsMargins(5, 3, 8, 3)
+        row.setSpacing(5)
+
+        self.document_tab = QFrame()
+        self.document_tab.setObjectName("DocumentTab")
+        tab_layout = QHBoxLayout(self.document_tab)
+        tab_layout.setContentsMargins(7, 2, 5, 2)
+        tab_layout.setSpacing(5)
 
         self.document_icon = QLabel()
         self.document_icon.setPixmap(icon("notebook").pixmap(17, 17))
-        self.document_icon.setFixedSize(20, 20)
+        self.document_icon.setFixedSize(19, 19)
+
         self.document_title = QLabel("Inicio")
         self.document_title.setObjectName("DocumentTitle")
+
+        self.close_document_button = AnimatedToolButton(
+            base_icon=12,
+            hover_icon=14,
+        )
+        self.close_document_button.setObjectName("TabButton")
+        self.close_document_button.setText("×")
+        self.close_document_button.setToolTip("Cerrar vista")
+        self.close_document_button.clicked.connect(self._show_welcome)
+
+        tab_layout.addWidget(self.document_icon)
+        tab_layout.addWidget(self.document_title)
+        tab_layout.addWidget(self.close_document_button)
+        row.addWidget(self.document_tab)
+
+        add_tab = AnimatedToolButton(base_icon=15, hover_icon=17)
+        add_tab.setObjectName("TabButton")
+        add_tab.setIcon(icon("add"))
+        add_tab.setToolTip("Nuevo notebook")
+        add_tab.clicked.connect(lambda: self._handle_new("notebook"))
+        row.addWidget(add_tab)
+
+        row.addStretch(1)
+
         self.document_path = QLabel(Path(self.root_dir).name)
         self.document_path.setObjectName("Muted")
-        self.document_path.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
-        row.addWidget(self.document_icon)
-        row.addWidget(self.document_title)
-        row.addStretch(1)
+        self.document_path.setAlignment(
+            Qt.AlignmentFlag.AlignRight
+            | Qt.AlignmentFlag.AlignVCenter
+        )
         row.addWidget(self.document_path)
+
         layout.addWidget(document)
 
         self.browser = QWebEngineView()
         self.browser.setPage(StudioWebPage(self.browser))
         self.browser.setZoomFactor(0.96)
-        self.browser.setStyleSheet("background:#fff;border:none;")
+        self.browser.setStyleSheet(
+            "background:#ffffff;border:none;border-radius:8px;"
+        )
         self.browser.loadFinished.connect(self._page_loaded)
         layout.addWidget(self.browser, 1)
+
         return frame
 
     def _build_statusbar(self) -> QFrame:
@@ -399,6 +447,7 @@ class StudioWindow(QMainWindow):
     def _set_active_document(self, path: str | None) -> None:
         self.active_document = os.path.abspath(path) if path else None
         has_document = bool(self.active_document)
+        self.document_tab.setVisible(has_document)
         self.save_button.setEnabled(has_document)
         self.run_button.setEnabled(
             bool(self.active_document and self.active_document.lower().endswith(".ipynb"))
@@ -536,6 +585,65 @@ class StudioWindow(QMainWindow):
         self.browser.page().runJavaScript(
             "window.__archyterStudio && window.__archyterStudio.runCell();"
         )
+
+    def _stop_kernel(self) -> None:
+        if not self.active_kernel_id:
+            QMessageBox.information(
+                self,
+                "Kernel",
+                "No hay un kernel activo.",
+            )
+            return
+
+        try:
+            self.manager.shutdown_kernel(self.active_kernel_id)
+            self.active_kernel_id = None
+            self.active_kernel_name = ""
+            self.inspector.set_variables([])
+            self.inspector.update_kernel(
+                "Python 3",
+                "detenido",
+                "Kernel detenido.",
+            )
+            self.save_status.setText("Kernel detenido")
+        except Exception as exc:
+            QMessageBox.warning(self, "Kernel", str(exc))
+
+    def _show_kernel_details(self) -> None:
+        if not self.active_kernel_id:
+            return
+
+        QMessageBox.information(
+            self,
+            "Kernel activo",
+            (
+                f"Kernel: {self.active_kernel_name}\n"
+                f"ID: {self.active_kernel_id}\n"
+                f"Jupyter: {self.manager.base_url}"
+            ),
+        )
+
+    def _open_terminal_window(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Archyter Studio — Terminal")
+        dialog.setWindowIcon(app_icon())
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        dialog.setStyleSheet(APP_STYLE)
+        dialog.resize(900, 560)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        terminal = TerminalCard(self.root_dir)
+        layout.addWidget(terminal)
+        dialog.finished.connect(lambda _code: terminal.shutdown())
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        QTimer.singleShot(0, lambda: apply_light_titlebar(self))
 
     def _restart_kernel(self) -> None:
         if not self.active_kernel_id:
