@@ -13,16 +13,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      - name: Extract source package
+      - name: Extract clean Rust source
         shell: pwsh
         run: |
-          if (Test-Path blackarch-forensic-console) { Remove-Item -Recurse -Force blackarch-forensic-console }
-          Expand-Archive -Path blackarch-forensic-console-source.zip -DestinationPath blackarch-forensic-console
+          $ErrorActionPreference = "Stop"
+          if (Test-Path forensic-src) { Remove-Item -Recurse -Force forensic-src }
+          New-Item -ItemType Directory -Path forensic-src | Out-Null
+          tar -xf blackarch-forensic-console-source.zip -C forensic-src
+          if (!(Test-Path forensic-src\Cargo.toml)) { throw "Cargo.toml not found after extraction" }
+          Get-ChildItem forensic-src
       - name: Format check
-        run: cargo fmt --manifest-path blackarch-forensic-console/Cargo.toml --all -- --check
+        run: cargo fmt --manifest-path forensic-src/Cargo.toml --all -- --check
       - name: Unit tests
-        run: cargo test --manifest-path blackarch-forensic-console/Cargo.toml --all
+        run: cargo test --manifest-path forensic-src/Cargo.toml --all
       - name: Clippy
-        run: cargo clippy --manifest-path blackarch-forensic-console/Cargo.toml --all-targets --all-features -- -D warnings
+        run: cargo clippy --manifest-path forensic-src/Cargo.toml --all-targets --all-features -- -D warnings
       - name: Optimized release build
-        run: cargo build --release --manifest-path blackarch-forensic-console/Cargo.toml
+        run: cargo build --release --manifest-path forensic-src/Cargo.toml
