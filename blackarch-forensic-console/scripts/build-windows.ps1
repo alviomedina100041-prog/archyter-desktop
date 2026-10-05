@@ -23,7 +23,6 @@ $Dist = Join-Path $Root "dist"
 New-Item -ItemType Directory -Force -Path (Join-Path $Dist "assets") | Out-Null
 Copy-Item $Exe (Join-Path $Dist "BlackArchForensicConsole.exe") -Force
 Copy-Item (Join-Path $Root "assets\blackarch.ico") (Join-Path $Dist "assets\blackarch.ico") -Force
-Copy-Item (Join-Path $Root "assets\blackarch.png") (Join-Path $Dist "assets\blackarch.png") -Force
 
 $Size = (Get-Item (Join-Path $Dist "BlackArchForensicConsole.exe")).Length / 1MB
 Write-Host ("OK: dist\BlackArchForensicConsole.exe ({0:N2} MB)" -f $Size) -ForegroundColor Green
