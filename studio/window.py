@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QProgressBar,
     QSplitter,
     QStackedWidget,
     QStyle,
@@ -188,6 +189,20 @@ class StudioWindow(QMainWindow):
         project.clicked.connect(self._choose_project)
         layout.addWidget(project)
 
+        self.reload_button = AnimatedToolButton(
+            base_icon=18,
+            hover_icon=20,
+        )
+        self.reload_button.setObjectName("IconButton")
+        self.reload_button.setIcon(icon("refresh"))
+        self.reload_button.setToolTip(
+            "Recargar notebook, proyecto y kernel"
+        )
+        self.reload_button.clicked.connect(
+            self._reload_everything
+        )
+        layout.addWidget(self.reload_button)
+
         layout.addStretch(1)
 
         search = AnimatedToolButton(base_icon=18, hover_icon=20)
@@ -299,6 +314,65 @@ class StudioWindow(QMainWindow):
         row.addStretch(1)
         layout.addWidget(document)
 
+        self.execution_banner = QFrame()
+        self.execution_banner.setObjectName(
+            "ExecutionBanner"
+        )
+        banner = QHBoxLayout(
+            self.execution_banner
+        )
+        banner.setContentsMargins(
+            10,
+            5,
+            8,
+            5,
+        )
+        banner.setSpacing(8)
+
+        self.execution_label = QLabel(
+            "Ejecutando proceso…"
+        )
+        self.execution_label.setObjectName(
+            "ExecutionLabel"
+        )
+        banner.addWidget(
+            self.execution_label
+        )
+
+        self.execution_progress = QProgressBar()
+        self.execution_progress.setObjectName(
+            "ExecutionProgress"
+        )
+        self.execution_progress.setRange(0, 0)
+        self.execution_progress.setTextVisible(False)
+        self.execution_progress.setFixedWidth(120)
+        self.execution_progress.setFixedHeight(8)
+        banner.addWidget(
+            self.execution_progress
+        )
+        banner.addStretch(1)
+
+        self.interrupt_button = QPushButton(
+            "Detener proceso"
+        )
+        self.interrupt_button.setObjectName(
+            "InterruptButton"
+        )
+        self.interrupt_button.setIcon(
+            icon("stop")
+        )
+        self.interrupt_button.clicked.connect(
+            self._interrupt_execution
+        )
+        banner.addWidget(
+            self.interrupt_button
+        )
+
+        self.execution_banner.hide()
+        layout.addWidget(
+            self.execution_banner
+        )
+
         self.editor_stack = QStackedWidget()
 
         self.welcome = QLabel(
@@ -404,6 +478,40 @@ class StudioWindow(QMainWindow):
             detail,
         )
 
+        busy = state in {
+            "busy",
+            "interrupting",
+        }
+
+        if state == "busy":
+            self.execution_label.setText(
+                "Ejecutando proceso Python…"
+            )
+            self.execution_banner.show()
+        elif state == "interrupting":
+            self.execution_label.setText(
+                "Deteniendo proceso…"
+            )
+            self.execution_banner.show()
+        else:
+            self.execution_banner.hide()
+
+        self.notebook_editor.set_execution_busy(
+            busy
+        )
+        self.run_button.setEnabled(
+            bool(
+                self.active_document
+                and not busy
+                and state
+                not in {
+                    "starting",
+                    "stopping",
+                    "dead",
+                }
+            )
+        )
+
     def _kernel_error(self, message: str) -> None:
         self.save_status.setText("Error de kernel")
         QMessageBox.warning(
@@ -421,6 +529,14 @@ class StudioWindow(QMainWindow):
             return
 
         self.save_status.setText("Ejecutando…")
+        self.execution_label.setText(
+            "Ejecutando proceso Python…"
+        )
+        self.execution_banner.show()
+        self.notebook_editor.set_execution_busy(
+            True
+        )
+        self.run_button.setEnabled(False)
         self.kernel.execute(
             code,
             request_id=cell_id,
@@ -444,6 +560,12 @@ class StudioWindow(QMainWindow):
         )
         self.kernel.refresh_variables()
 
+    def _interrupt_execution(self) -> None:
+        self.execution_label.setText(
+            "Deteniendo proceso…"
+        )
+        self.kernel.interrupt()
+
     def _refresh_variables(self) -> None:
         self.kernel.refresh_variables()
 
@@ -453,13 +575,13 @@ class StudioWindow(QMainWindow):
         self.save_status.setText("Reiniciando kernel…")
 
     def _stop_kernel(self) -> None:
-        self.kernel.shutdown()
         self.inspector.set_variables([])
-        self._kernel_state_changed(
-            "dead",
-            self.kernel_name,
+        self.execution_banner.hide()
+        self.notebook_editor.set_execution_busy(
+            False
         )
-        self.save_status.setText("Kernel detenido")
+        self.kernel.stop()
+        self.save_status.setText("Deteniendo kernel…")
 
     def _show_kernel_details(self) -> None:
         QMessageBox.information(
@@ -713,6 +835,60 @@ class StudioWindow(QMainWindow):
                 "Eliminar",
                 str(exc),
             )
+
+    def _reload_everything(self) -> None:
+        if (
+            self.active_document
+            and self.notebook_editor.dirty
+        ):
+            choice = QMessageBox.question(
+                self,
+                "Recargar Archyter",
+                (
+                    "Hay cambios sin guardar. "
+                    "¿Quieres guardarlos antes de recargar?"
+                ),
+                QMessageBox.StandardButton.Save
+                | QMessageBox.StandardButton.Discard
+                | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Save,
+            )
+
+            if (
+                choice
+                == QMessageBox.StandardButton.Cancel
+            ):
+                return
+
+            if (
+                choice
+                == QMessageBox.StandardButton.Save
+            ):
+                self._save()
+
+        current = self.active_document
+        self.save_status.setText(
+            "Recargando…"
+        )
+
+        self.inspector.set_variables([])
+        self.explorer.refresh()
+        self.inspector.terminal.set_working_directory(
+            self.root_dir
+        )
+        self.kernel.restart()
+
+        if (
+            current
+            and Path(current).is_file()
+        ):
+            self._open_file(current)
+        else:
+            self._show_welcome()
+
+        self.save_status.setText(
+            "Recargado"
+        )
 
     def _choose_project(self) -> None:
         folder = QFileDialog.getExistingDirectory(
