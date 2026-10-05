@@ -25,6 +25,56 @@ class NativeKernelTests(unittest.TestCase):
             time.sleep(0.03)
         return False
 
+
+    def test_variable_inspector_hides_runtime_modules_and_functions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            controller = NativeKernelController(temp)
+            results: list[tuple] = []
+            snapshots: list[list[dict]] = []
+
+            controller.execution_finished.connect(
+                lambda *args: results.append(args)
+            )
+            controller.variables_ready.connect(
+                lambda values: snapshots.append(list(values))
+            )
+
+            try:
+                controller.start()
+                self.assertTrue(
+                    self._wait_until(lambda: controller.is_running),
+                    "Native Python kernel did not become ready",
+                )
+
+                controller.execute(
+                    "import math\n"
+                    "def helper():\n"
+                    "    return 1\n"
+                    "user_value = 123",
+                    request_id="vars-setup",
+                )
+                self.assertTrue(
+                    self._wait_until(lambda: bool(results)),
+                    "Variable setup did not finish",
+                )
+
+                controller.refresh_variables()
+                self.assertTrue(
+                    self._wait_until(lambda: bool(snapshots)),
+                    "Variable snapshot did not arrive",
+                )
+
+                names = {
+                    item.get("name")
+                    for item in snapshots[-1]
+                }
+                self.assertIn("user_value", names)
+                self.assertNotIn("math", names)
+                self.assertNotIn("helper", names)
+                self.assertNotIn("open", names)
+            finally:
+                controller.shutdown()
+
     def test_real_python_kernel_executes_without_jupyterlab_server(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             controller = NativeKernelController(temp)
