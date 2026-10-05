@@ -171,6 +171,43 @@ class UiContractTests(unittest.TestCase):
                 window.inspector.terminal.shutdown()
                 window.close()
 
+
+    def test_webengine_watchdog_wakes_stalled_load_without_reload(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+
+            with (
+                patch.object(
+                    StudioWindow,
+                    "_start_jupyter",
+                    lambda self: None,
+                ),
+                patch.object(
+                    StudioWindow,
+                    "_start_timers",
+                    lambda self: None,
+                ),
+            ):
+                window = StudioWindow(str(root))
+
+            try:
+                calls = []
+                window._web_loading = True
+                window._web_progress_at = time.monotonic() - 2.0
+                window._wake_webengine = lambda: calls.append("wake")
+
+                window._webengine_watchdog_tick()
+
+                self.assertEqual(calls, ["wake"])
+                self.assertGreater(
+                    window._web_progress_at,
+                    time.monotonic() - 0.5,
+                )
+            finally:
+                window._closing = True
+                window.inspector.terminal.shutdown()
+                window.close()
+
     def test_main_window_matches_studio_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
