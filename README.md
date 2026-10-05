@@ -1,34 +1,83 @@
+<div align="center">
+
+<img src="assets/icon.svg" alt="Archyter Studio" width="92">
+
 # Archyter Studio
 
-**Archyter Studio** is the Windows edition of the Archyter notebook IDE. It is built around JupyterLab but presents its own desktop shell: project explorer, notebook workspace, kernel inspector, variables, terminal, recent projects and Windows-native installation.
+### Edición para Windows 10 / Windows 11
 
-> Development branch: `windows-studio`
+**Un entorno de notebooks con shell de escritorio propio, explorador de proyectos, Jupyter local y herramientas integradas de Windows.**
 
-## Target
+![Windows](https://img.shields.io/badge/OS-Windows%2010%2F11-0078D4?logo=windows11&logoColor=white)
+![JupyterLab](https://img.shields.io/badge/JupyterLab-local-F37626?logo=jupyter&logoColor=white)
+![PySide6](https://img.shields.io/badge/UI-PySide6-41CD52?logo=qt&logoColor=white)
+![PowerShell](https://img.shields.io/badge/Shell-PowerShell-5391FE?logo=powershell&logoColor=white)
 
-The Windows interface follows the approved Archyter Studio concept:
+</div>
 
-- white/light-blue desktop UI;
-- left navigation rail;
-- project explorer with reliable local icons;
-- notebook-first center workspace;
-- kernel + variables + PowerShell inspector;
-- explicit save/run/project controls;
-- safe deletion through the Windows Recycle Bin;
-- recent projects;
-- local Jupyter bound to `127.0.0.1`.
+![Archyter Studio · windows-studio](assets/branch-windows-studio.svg)
 
-The visual and behavioural contract is documented in `docs/WINDOWS_DESIGN_CONTRACT.md`.
+> **Rama:** `windows-studio`  
+> Esta rama contiene exclusivamente la edición de Windows. No representa la interfaz ni el instalador de la rama principal de Arch Linux.
 
-## Requirements
+## Objetivo
 
-- Windows 10 or Windows 11;
-- Python 3.11+;
-- internet access during the first dependency installation.
+Archyter Studio adapta la experiencia de Archyter al escritorio de Windows manteniendo Jupyter como motor de notebooks, pero envolviéndolo con una interfaz propia.
 
-## Test from source
+El diseño aprobado de esta rama prioriza:
 
-Open PowerShell:
+- interfaz clara con acentos azules;
+- navegación lateral;
+- explorador de proyectos;
+- workspace central orientado al notebook;
+- paneles de kernel, variables, terminal y logs;
+- integración con PowerShell;
+- manejo de proyectos recientes;
+- instalación nativa para el menú Inicio.
+
+El contrato visual y de comportamiento se documenta en:
+
+```text
+docs/WINDOWS_DESIGN_CONTRACT.md
+```
+
+## Funciones principales
+
+### Workspace de notebooks
+
+- JupyterLab ejecutado localmente.
+- Vista embebida dentro de la aplicación.
+- Soporte para notebooks y archivos del proyecto.
+- Controles explícitos de guardado, ejecución y kernel.
+
+### Explorador de proyectos
+
+- navegación por carpetas;
+- iconos locales confiables;
+- selección y apertura de archivos;
+- eliminación segura usando la **Papelera de reciclaje de Windows**;
+- administración de proyectos recientes.
+
+### Paneles de trabajo
+
+- información del kernel;
+- variables;
+- PowerShell;
+- terminal;
+- logs;
+- herramientas auxiliares sin depender de una consola externa.
+
+### Seguridad local
+
+El servidor Jupyter se mantiene vinculado a `127.0.0.1`, evitando exposición innecesaria en la red.
+
+## Requisitos
+
+- Windows 10 o Windows 11;
+- Python 3.11 o superior;
+- conexión a Internet durante la primera instalación de dependencias.
+
+## Probar desde código fuente
 
 ```powershell
 git clone --branch windows-studio https://github.com/alviomedina100041-prog/archyter-desktop.git Archyter-Studio
@@ -42,51 +91,58 @@ pip install -r requirements-windows.txt
 python -m studio.main
 ```
 
-If PowerShell blocks environment activation, activation is optional:
+Si PowerShell bloquea la activación del entorno, puedes utilizar directamente:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-windows.txt
 .\.venv\Scripts\python.exe -m studio.main
 ```
 
-## Install in Windows
-
-From the repository:
+## Instalación en Windows
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\install_windows.ps1
 ```
 
-The installer creates a private application environment under:
+La instalación privada se guarda en:
 
 ```text
 %LOCALAPPDATA%\ArchyterStudio
 ```
 
-and registers **Archyter Studio** in the Windows Start menu.
-
-Uninstall:
+Para desinstalar:
 
 ```powershell
 Set-ExecutionPolicy -Scope Process Bypass
 .\scripts\uninstall_windows.ps1
 ```
 
-## Quality gates
+## Validación de calidad
 
-Every push to `windows-studio` is validated on a real GitHub Actions Windows runner. The workflow:
+La rama dispone de CI para Windows. El flujo valida, entre otras cosas:
 
-1. installs the Windows dependencies;
-2. compiles the Studio sources;
-3. starts a real JupyterLab server and creates a notebook in a nested project folder;
-4. validates explorer selection, icons and delete signalling;
-5. starts the detected Windows shell and runs a command;
-6. instantiates the full Qt/WebEngine Studio window and checks the approved panel proportions;
-7. renders a 1480×900 smoke screenshot and uploads it as a workflow artifact.
+- instalación de dependencias;
+- compilación/sintaxis del código;
+- arranque de Jupyter;
+- creación y apertura de notebooks;
+- explorador e iconos;
+- señalización de borrado;
+- shell de Windows;
+- construcción de la ventana Qt/WebEngine;
+- screenshot de smoke test.
 
-This does not mean desktop software can never contain a bug, but changes are not considered healthy until the Windows CI passes.
+La CI ayuda a detectar regresiones, aunque no sustituye las pruebas manuales en hardware real.
 
-## Linux edition
 
-The original Archyter Desktop for Arch Linux remains on the `main` branch.
+## Mapa de ramas
+
+| Rama | Propósito |
+|---|---|
+| `main` | Edición principal de Archyter Desktop para Arch Linux. |
+| `windows-studio` | Edición de Archyter Studio para Windows 10/11. |
+| `feature/blackarch-forensic-console` | Implementación forense nativa en Rust + Win32/GDI con integración WSL2. |
+| `blackarch-forensic-console` | Prototipo/staging visual en Rust + eframe/egui para el workspace DFIR. |
+
+Cada rama mantiene su propio README e imagen para que GitHub muestre claramente qué producto estás viendo.
+
