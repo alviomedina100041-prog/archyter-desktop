@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from .animated import AnimatedToolButton, add_soft_shadow
-from .icons import icon
+from .icons import asset_pixmap, icon
 from .terminal import TerminalCard
 
 
@@ -57,14 +57,19 @@ class InspectorPanel(QFrame):
         kernel_header = QHBoxLayout()
         kernel_header.setSpacing(5)
 
-        kernel_title_icon = QLabel()
-        kernel_title_icon.setPixmap(icon("kernel").pixmap(15, 15))
-        kernel_title_icon.setFixedSize(17, 17)
+        self.kernel_title_icon = QLabel()
+        self.kernel_title_icon.setPixmap(
+            asset_pixmap("python", 18)
+        )
+        self.kernel_title_icon.setFixedSize(20, 20)
+        self.kernel_title_icon.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
 
         kernel_title = QLabel("Kernel")
         kernel_title.setObjectName("SectionTitle")
 
-        kernel_header.addWidget(kernel_title_icon)
+        kernel_header.addWidget(self.kernel_title_icon)
         kernel_header.addWidget(kernel_title)
         kernel_header.addStretch(1)
         k.addLayout(kernel_header)
@@ -72,11 +77,18 @@ class InspectorPanel(QFrame):
         identity = QHBoxLayout()
         identity.setSpacing(8)
 
-        python_logo = QLabel()
-        python_logo.setPixmap(icon("python").pixmap(42, 42))
-        python_logo.setFixedSize(46, 46)
-        python_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        identity.addWidget(python_logo)
+        self.python_logo = QLabel()
+        self.python_logo.setPixmap(
+            asset_pixmap("python", 48)
+        )
+        self.python_logo.setFixedSize(52, 52)
+        self.python_logo.setAlignment(
+            Qt.AlignmentFlag.AlignCenter
+        )
+        self.python_logo.setToolTip(
+            "Python kernel"
+        )
+        identity.addWidget(self.python_logo)
 
         name_column = QVBoxLayout()
         name_column.setSpacing(1)
