@@ -16,6 +16,22 @@ from studio.native_notebook import MAX_CELL_OUTPUT_CHARS, NativeNotebookEditor
 from studio.window import StudioWindow
 
 
+def visible_pixmap_pixel_count(pixmap) -> int:
+    if pixmap is None or pixmap.isNull():
+        return 0
+
+    image = pixmap.toImage()
+    count = 0
+
+    for y in range(image.height()):
+        for x in range(image.width()):
+            color = QColor.fromRgba(image.pixel(x, y))
+            if color.alpha() > 20:
+                count += 1
+
+    return count
+
+
 def visible_pixel_count(qicon) -> int:
     pixmap = qicon.pixmap(28, 28)
     if pixmap.isNull():
@@ -400,6 +416,24 @@ class UiContractTests(unittest.TestCase):
                         window.reload_button.icon()
                     ),
                     18,
+                )
+                self.assertGreater(
+                    visible_pixmap_pixel_count(
+                        window.app_logo.pixmap()
+                    ),
+                    80,
+                )
+                self.assertGreater(
+                    visible_pixmap_pixel_count(
+                        window.inspector.python_logo.pixmap()
+                    ),
+                    80,
+                )
+                self.assertGreater(
+                    visible_pixmap_pixel_count(
+                        window.inspector.kernel_title_icon.pixmap()
+                    ),
+                    20,
                 )
             finally:
                 window._closing = True
