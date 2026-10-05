@@ -8,12 +8,9 @@ from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtSvg import QSvgRenderer
 
 
-def main() -> int:
-    if len(sys.argv) != 3:
-        raise SystemExit("usage: build_windows_icon.py input.svg output.ico")
-
-    source = Path(sys.argv[1]).resolve()
-    target = Path(sys.argv[2]).resolve()
+def build_icon(source_path: str, target_path: str) -> Path:
+    source = Path(source_path).resolve()
+    target = Path(target_path).resolve()
 
     renderer = QSvgRenderer(str(source))
     if not renderer.isValid():
@@ -44,6 +41,14 @@ def main() -> int:
             f"No se pudo generar el icono de Windows: {target}"
         )
 
+    return target
+
+
+def main() -> int:
+    if len(sys.argv) != 3:
+        raise SystemExit("usage: build_windows_icon.py input.svg output.ico")
+
+    build_icon(sys.argv[1], sys.argv[2])
     return 0
 
 
