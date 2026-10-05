@@ -54,7 +54,7 @@ class InspectorPanel(QFrame):
         kernel_header.setSpacing(5)
 
         kernel_title_icon = QLabel()
-        kernel_title_icon.setPixmap(icon("variables").pixmap(15, 15))
+        kernel_title_icon.setPixmap(icon("kernel").pixmap(15, 15))
         kernel_title_icon.setFixedSize(17, 17)
 
         kernel_title = QLabel("Kernel")
