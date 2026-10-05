@@ -367,3 +367,40 @@ button:disabled { opacity: .45; cursor: default; transform: none !important; }
 @keyframes toastIn { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes modalIn { from { opacity: 0; transform: translateY(10px) scale(.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+
+.hex-card {
+  margin-top: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 9px;
+  background: #040c10;
+  overflow: hidden;
+}
+.hex-toolbar {
+  min-height: 38px;
+  padding: 0 8px 0 10px;
+  border-bottom: 1px solid #10262d;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.hex-actions { display: flex; gap: 5px; }
+.hex-grid {
+  max-height: 224px;
+  overflow: auto;
+  padding: 6px 8px 8px;
+  background: #02080b;
+}
+.hex-row {
+  min-width: 480px;
+  display: grid;
+  grid-template-columns: 68px 1fr 132px;
+  gap: 9px;
+  align-items: baseline;
+  min-height: 19px;
+  font-size: 9px;
+}
+.hex-row code { font-family: "Cascadia Mono", "Cascadia Code", Consolas, monospace; }
+.hex-offset { color: #58717b; }
+.hex-bytes { color: #b8d0d6; white-space: pre; }
+.hex-ascii { color: var(--cyan); white-space: pre; }
