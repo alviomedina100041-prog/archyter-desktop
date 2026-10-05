@@ -51,6 +51,7 @@ class ExplorerPanel(QFrame):
     project_requested = Signal(str)
     new_requested = Signal(str)
     delete_requested = Signal(str)
+    rename_requested = Signal(str)
     location_changed = Signal(str)
 
     def __init__(self, root_dir: str):
@@ -91,6 +92,13 @@ class ExplorerPanel(QFrame):
         text_file.triggered.connect(lambda: self.new_requested.emit("file"))
         self.new_button.setMenu(menu)
 
+        self.rename_button = AnimatedToolButton(base_icon=17, hover_icon=19)
+        self.rename_button.setObjectName("IconButton")
+        self.rename_button.setIcon(icon("edit"))
+        self.rename_button.setToolTip("Renombrar seleccionado (F2)")
+        self.rename_button.setEnabled(False)
+        self.rename_button.clicked.connect(self._rename_selected)
+
         self.delete_button = AnimatedToolButton(base_icon=17, hover_icon=19)
         self.delete_button.setObjectName("DeleteButton")
         self.delete_button.setIcon(icon("trash"))
@@ -101,6 +109,7 @@ class ExplorerPanel(QFrame):
         self.delete_button.clicked.connect(self._delete_selected)
 
         header.addWidget(self.new_button)
+        header.addWidget(self.rename_button)
         header.addWidget(self.delete_button)
         layout.addLayout(header)
 
@@ -134,12 +143,14 @@ class ExplorerPanel(QFrame):
         self.tree.setItemDelegate(CleanTreeDelegate(self.tree))
         self.tree.setUniformRowHeights(True)
         self.tree.setEditTriggers(QTreeView.EditTrigger.NoEditTriggers)
+        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree.customContextMenuRequested.connect(self._show_context_menu)
         self.tree.setExpandsOnDoubleClick(True)
         self.tree.setAllColumnsShowFocus(False)
         self.tree.clicked.connect(self._clicked)
         self.tree.doubleClicked.connect(self._double_clicked)
         self.tree.selectionModel().selectionChanged.connect(
-            lambda *_args: self._update_delete_state()
+            lambda *_args: self._update_action_state()
         )
 
         for column in range(1, 4):
@@ -189,7 +200,7 @@ class ExplorerPanel(QFrame):
         self.path_label.setText(self._display_location(directory))
         self.path_label.setToolTip(directory)
         self.location_changed.emit(directory)
-        self._update_delete_state()
+        self._update_action_state()
 
     def _double_clicked(self, index: QModelIndex) -> None:
         path = self.model.filePath(index)
@@ -197,14 +208,64 @@ class ExplorerPanel(QFrame):
             self.set_active_path(path)
             self.file_open_requested.emit(path)
 
-    def _update_delete_state(self) -> None:
+    def _update_action_state(self) -> None:
         path = self.selected_path()
-        self.delete_button.setEnabled(bool(path and os.path.isfile(path)))
+        exists = bool(path and os.path.exists(path))
+        self.rename_button.setEnabled(exists)
+        self.delete_button.setEnabled(
+            bool(path and os.path.isfile(path))
+        )
+
+    def _rename_selected(self) -> None:
+        path = self.selected_path()
+        if path and os.path.exists(path):
+            self.rename_requested.emit(path)
 
     def _delete_selected(self) -> None:
         path = self.selected_path()
         if path and os.path.isfile(path):
             self.delete_requested.emit(path)
+
+    def _show_context_menu(self, position) -> None:
+        index = self.tree.indexAt(position)
+        if not index.isValid():
+            return
+
+        self.tree.setCurrentIndex(index)
+        self._clicked(index)
+
+        menu = QMenu(self.tree)
+        rename_action = menu.addAction(
+            icon("edit"),
+            "Renombrar",
+        )
+        rename_action.setShortcut("F2")
+        rename_action.triggered.connect(
+            self._rename_selected
+        )
+
+        path = self.model.filePath(index)
+        if os.path.isfile(path):
+            delete_action = menu.addAction(
+                icon("trash"),
+                "Enviar a la papelera",
+            )
+            delete_action.triggered.connect(
+                self._delete_selected
+            )
+
+        menu.exec(
+            self.tree.viewport().mapToGlobal(
+                position
+            )
+        )
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_F2:
+            self._rename_selected()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def set_active_path(self, path: str) -> None:
         resolved = os.path.abspath(path)
@@ -225,7 +286,7 @@ class ExplorerPanel(QFrame):
             self._display_location(self._current_directory)
         )
         self.path_label.setToolTip(self._current_directory)
-        self._update_delete_state()
+        self._update_action_state()
 
     def refresh(self) -> None:
         root = self.root_dir
@@ -237,6 +298,7 @@ class ExplorerPanel(QFrame):
             self.set_active_path(self._active_path)
         else:
             self._active_path = None
+            self.rename_button.setEnabled(False)
             self.delete_button.setEnabled(False)
 
     def set_root(self, root_dir: str) -> None:
@@ -250,6 +312,7 @@ class ExplorerPanel(QFrame):
 
         self.path_label.setText(self._display_location(self.root_dir))
         self.path_label.setToolTip(self.root_dir)
+        self.rename_button.setEnabled(False)
         self.delete_button.setEnabled(False)
         self.reload_recents()
 
