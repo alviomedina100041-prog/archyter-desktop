@@ -1,23 +1,13 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
-import threading
-import time
 from pathlib import Path
 
 from send2trash import send2trash
-from PySide6.QtCore import (
-    QEvent,
-    QSettings,
-    QStandardPaths,
-    QTimer,
-    Qt,
-    QUrl,
-    Signal,
-)
-from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
-from PySide6.QtWebEngineWidgets import QWebEngineView
+from PySide6.QtCore import QSettings, QTimer, Qt
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -31,6 +21,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSplitter,
+    QStackedWidget,
     QStyle,
     QToolButton,
     QVBoxLayout,
@@ -41,59 +32,25 @@ from .animated import AnimatedPushButton, AnimatedToolButton, add_soft_shadow
 from .explorer import ExplorerPanel
 from .icons import app_icon, icon
 from .inspector import InspectorPanel
-from .jupyter_manager import JupyterManager
+from .native_kernel import NativeKernelController
+from .native_notebook import NativeNotebookEditor
 from .terminal import TerminalCard
 from .theme import APP_STYLE
 from .windows_chrome import apply_light_titlebar
 
 
-class StudioWebPage(QWebEnginePage):
-    def javaScriptConsoleMessage(self, level, message, line_number, source_id):
-        ignored = (
-            "No active debugger session",
-            "ResizeObserver loop",
-            "Blocked attempt to show a 'beforeunload' confirmation panel",
-        )
-        if any(fragment in message for fragment in ignored):
-            return
-        super().javaScriptConsoleMessage(level, message, line_number, source_id)
-
-
-class FocusWebEngineView(QWebEngineView):
-    def mousePressEvent(self, event) -> None:
-        self.setFocus(Qt.FocusReason.MouseFocusReason)
-        super().mousePressEvent(event)
-
-
 class StudioWindow(QMainWindow):
-    jupyter_started = Signal(object)
-    session_refreshed = Signal(object)
-    variables_refreshed = Signal(object)
-
     def __init__(self, root_dir: str):
         super().__init__()
         self.root_dir = str(Path(root_dir).resolve())
         self.settings = QSettings("EduardoMedinaLabs", "ArchyterStudio")
         self.settings.setValue("last_project", self.root_dir)
 
-        self.manager = JupyterManager(self.root_dir)
         self.active_document: str | None = None
-        self.active_kernel_id: str | None = None
-        self.active_kernel_name = ""
-        self.started_at = time.time()
-        self._page_retries = 0
-        self._logs: list[str] = []
-        self._jupyter_starting = False
-        self._session_refresh_pending = False
-        self._variables_refresh_pending = False
-        self._web_loading = False
-        self._web_load_progress = 0
-        self._web_progress_at = 0.0
+        self.kernel = NativeKernelController(self.root_dir)
+        self.kernel_state = "starting"
+        self.kernel_name = "python3"
         self._closing = False
-
-        self.jupyter_started.connect(self._handle_jupyter_started)
-        self.session_refreshed.connect(self._apply_session_snapshot)
-        self.variables_refreshed.connect(self._apply_variables_snapshot)
 
         self.setWindowTitle("Archyter Studio")
         self.setWindowIcon(app_icon())
@@ -102,9 +59,10 @@ class StudioWindow(QMainWindow):
 
         self._build_ui()
         self.setStyleSheet(APP_STYLE)
-        self._wire_manager()
-        self._start_jupyter()
-        self._start_timers()
+        self._connect_kernel()
+        self._install_shortcuts()
+
+        self.kernel.start()
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -163,6 +121,7 @@ class StudioWindow(QMainWindow):
         bar.setObjectName("TopBar")
         bar.setFixedHeight(60)
         add_soft_shadow(bar, blur=18, y_offset=2, alpha=19)
+
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(12, 7, 12, 7)
         layout.setSpacing(7)
@@ -181,12 +140,16 @@ class StudioWindow(QMainWindow):
         self.new_button = AnimatedToolButton(base_icon=17, hover_icon=19)
         self.new_button.setText("Nuevo")
         self.new_button.setIcon(icon("add"))
-        self.new_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.new_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.new_button.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        self.new_button.setPopupMode(
+            QToolButton.ToolButtonPopupMode.InstantPopup
+        )
         menu = QMenu(self.new_button)
         notebook = menu.addAction(icon("notebook"), "Notebook")
         folder = menu.addAction(icon("folder"), "Carpeta")
-        text_file = menu.addAction("Archivo de texto")
+        text_file = menu.addAction(icon("file"), "Archivo de texto")
         notebook.triggered.connect(lambda: self._handle_new("notebook"))
         folder.triggered.connect(lambda: self._handle_new("folder"))
         text_file.triggered.connect(lambda: self._handle_new("file"))
@@ -201,14 +164,16 @@ class StudioWindow(QMainWindow):
 
         self.run_button = AnimatedPushButton("Ejecutar")
         self.run_button.setObjectName("Primary")
-        self.run_button.setIcon(icon("play", QStyle.StandardPixmap.SP_MediaPlay))
+        self.run_button.setIcon(
+            icon("play", QStyle.StandardPixmap.SP_MediaPlay)
+        )
         self.run_button.setEnabled(False)
         self.run_button.clicked.connect(self._run_cell)
         layout.addWidget(self.run_button)
 
         self.kernel_button = AnimatedPushButton("Kernel")
         self.kernel_button.setIcon(icon("kernel"))
-        self.kernel_button.setToolTip("Reiniciar el kernel activo")
+        self.kernel_button.setToolTip("Reiniciar kernel")
         self.kernel_button.clicked.connect(self._restart_kernel)
         layout.addWidget(self.kernel_button)
 
@@ -227,14 +192,14 @@ class StudioWindow(QMainWindow):
         search = AnimatedToolButton(base_icon=18, hover_icon=20)
         search.setObjectName("IconButton")
         search.setIcon(icon("search"))
-        search.setToolTip("Buscar en el proyecto")
+        search.setToolTip("Buscar en proyecto")
         search.clicked.connect(self._search_project)
         layout.addWidget(search)
 
         settings = AnimatedToolButton(base_icon=18, hover_icon=20)
         settings.setObjectName("IconButton")
         settings.setIcon(icon("settings"))
-        settings.setToolTip("Configuración de Archyter Studio")
+        settings.setToolTip("Configuración")
         settings.clicked.connect(self._show_settings)
         layout.addWidget(settings)
 
@@ -244,6 +209,7 @@ class StudioWindow(QMainWindow):
         rail = QFrame()
         rail.setObjectName("NavRail")
         rail.setFixedWidth(48)
+
         layout = QVBoxLayout(rail)
         layout.setContentsMargins(5, 7, 5, 7)
         layout.setSpacing(5)
@@ -260,9 +226,9 @@ class StudioWindow(QMainWindow):
             button = AnimatedToolButton(base_icon=20, hover_icon=22)
             button.setObjectName("NavButton")
             button.setIcon(icon(name))
-            button.setIconSize(button.iconSize() * 1.15)
             button.setToolTip(tooltip)
             button.setProperty("active", active)
+
             if name == "home":
                 button.clicked.connect(self._show_welcome)
             elif name == "search":
@@ -273,6 +239,7 @@ class StudioWindow(QMainWindow):
                 button.clicked.connect(self._run_cell)
             elif name == "grid":
                 button.clicked.connect(self._show_settings)
+
             layout.addWidget(button)
 
         layout.addStretch(1)
@@ -328,463 +295,252 @@ class StudioWindow(QMainWindow):
         add_tab.setToolTip("Nuevo notebook")
         add_tab.clicked.connect(lambda: self._handle_new("notebook"))
         row.addWidget(add_tab)
-
         row.addStretch(1)
-
-        self.document_path = QLabel(Path(self.root_dir).name)
-        self.document_path.setObjectName("Muted")
-        self.document_path.setAlignment(
-            Qt.AlignmentFlag.AlignRight
-            | Qt.AlignmentFlag.AlignVCenter
-        )
-        self.document_path.hide()
-        row.addWidget(self.document_path)
-
         layout.addWidget(document)
 
-        self.browser = FocusWebEngineView()
+        self.editor_stack = QStackedWidget()
 
-        cache_root = Path(
-            QStandardPaths.writableLocation(
-                QStandardPaths.StandardLocation.CacheLocation
-            )
-        ) / "webengine"
-        data_root = Path(
-            QStandardPaths.writableLocation(
-                QStandardPaths.StandardLocation.AppLocalDataLocation
-            )
-        ) / "webengine"
-
-        cache_root.mkdir(parents=True, exist_ok=True)
-        data_root.mkdir(parents=True, exist_ok=True)
-
-        self.web_profile = QWebEngineProfile(
-            "ArchyterStudio",
-            self.browser,
+        self.welcome = QLabel(
+            "<div style='text-align:center'>"
+            "<div style='font-size:48px;color:#149fe2;font-weight:700'>A</div>"
+            "<div style='font-size:24px;font-weight:700'>Archyter Studio</div>"
+            "<div style='color:#718096;margin-top:8px'>"
+            "Notebook IDE nativo para Windows"
+            "</div></div>"
         )
-        self.web_profile.setCachePath(str(cache_root))
-        self.web_profile.setPersistentStoragePath(str(data_root))
-        self.web_profile.setHttpCacheType(
-            QWebEngineProfile.HttpCacheType.DiskHttpCache
-        )
+        self.welcome.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.welcome.setObjectName("StudioWelcome")
 
-        self.browser.setPage(
-            StudioWebPage(
-                self.web_profile,
-                self.browser,
-            )
-        )
-        self.browser.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.browser.setZoomFactor(0.96)
-        self.browser.setStyleSheet(
-            "background:#ffffff;border:none;border-radius:8px;"
-        )
-        self.browser.loadStarted.connect(self._web_load_started)
-        self.browser.loadProgress.connect(self._web_load_progressed)
-        self.browser.loadFinished.connect(self._page_loaded)
-        layout.addWidget(self.browser, 1)
+        self.notebook_editor = NativeNotebookEditor()
+        self.notebook_editor.dirty_changed.connect(self._dirty_changed)
+        self.notebook_editor.execute_requested.connect(self._execute_cell)
 
+        self.editor_stack.addWidget(self.welcome)
+        self.editor_stack.addWidget(self.notebook_editor)
+        layout.addWidget(self.editor_stack, 1)
+
+        self._show_welcome()
         return frame
 
     def _build_statusbar(self) -> QFrame:
         bar = QFrame()
         bar.setObjectName("StatusBar")
         bar.setFixedHeight(31)
+
         layout = QHBoxLayout(bar)
         layout.setContentsMargins(12, 3, 12, 3)
         layout.setSpacing(12)
 
-        self.kernel_status = QLabel("Python | iniciando")
+        self.kernel_status = QLabel("python3 | iniciando")
         self.kernel_status.setObjectName("Muted")
-        self.save_status = QLabel("Preparando Jupyter…")
+
+        self.save_status = QLabel("Listo")
         self.save_status.setObjectName("StatusGood")
+
         self.project_status = QLabel(self.root_dir)
         self.project_status.setObjectName("Muted")
-        self.project_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.project_status.setAlignment(
+            Qt.AlignmentFlag.AlignRight
+            | Qt.AlignmentFlag.AlignVCenter
+        )
 
         layout.addWidget(self.kernel_status)
         layout.addWidget(self.save_status)
         layout.addStretch(1)
         layout.addWidget(QLabel("UTF-8"))
-        layout.addWidget(QLabel("Jupyter"))
+        layout.addWidget(QLabel("Jupyter Kernel"))
         layout.addWidget(self.project_status)
         return bar
 
-    def _wire_manager(self) -> None:
-        self.manager.log_line.connect(self._append_log)
-        self.manager.status_changed.connect(self._manager_status)
-
-    def _append_log(self, line: str) -> None:
-        self._logs.append(line)
-        if len(self._logs) > 600:
-            self._logs = self._logs[-600:]
-
-    def _manager_status(self, state: str) -> None:
-        self.kernel_status.setText(f"Jupyter | {state}")
-
-    def _start_jupyter(self) -> None:
-        if self._jupyter_starting:
-            return
-
-        self._jupyter_starting = True
-        self.save_status.setText("Iniciando Jupyter…")
-        manager = self.manager
-
-        def worker() -> None:
-            error = None
-            try:
-                manager.start()
-            except Exception as exc:
-                error = str(exc)
-
-            if self._closing:
-                if error is None:
-                    manager.shutdown()
-                return
-
-            try:
-                self.jupyter_started.emit(
-                    {
-                        "manager": manager,
-                        "error": error,
-                    }
-                )
-            except RuntimeError:
-                pass
-
-        threading.Thread(
-            target=worker,
-            name="archyter-jupyter-start",
-            daemon=True,
-        ).start()
-
-    def _handle_jupyter_started(self, payload: object) -> None:
-        data = dict(payload or {})
-        manager = data.get("manager")
-
-        if manager is not self.manager:
-            return
-
-        self._jupyter_starting = False
-        error = data.get("error")
-
-        if error:
-            self.save_status.setText("Error al iniciar Jupyter")
-            QMessageBox.critical(
-                self,
-                "Archyter Studio",
-                str(error),
-            )
-            return
-
-        if not self.active_document:
-            self._show_welcome()
-
-        self.save_status.setText("Listo")
-
-    def _start_timers(self) -> None:
-        self.state_timer = QTimer(self)
-        self.state_timer.timeout.connect(self._refresh_session)
-        self.state_timer.start(5000)
-
-        self.dirty_timer = QTimer(self)
-        self.dirty_timer.timeout.connect(self._refresh_dirty_state)
-        self.dirty_timer.start(2500)
-
-        self.web_watchdog = QTimer(self)
-        self.web_watchdog.timeout.connect(self._webengine_watchdog_tick)
-        self.web_watchdog.start(400)
-
-    def _web_load_started(self) -> None:
-        self._web_loading = True
-        self._web_load_progress = 0
-        self._web_progress_at = time.monotonic()
-        self._wake_webengine()
-
-    def _web_load_progressed(self, progress: int) -> None:
-        progress = int(progress)
-        if progress != self._web_load_progress:
-            self._web_load_progress = progress
-            self._web_progress_at = time.monotonic()
-
-        if self.active_document:
-            self.save_status.setText(
-                f"Cargando editor… {progress}%"
-            )
-
-    def _wake_webengine(self) -> None:
-        if not hasattr(self, "browser"):
-            return
-
-        try:
-            page = self.browser.page()
-
-            if hasattr(page, "setVisible"):
-                page.setVisible(True)
-
-            lifecycle = getattr(
-                QWebEnginePage,
-                "LifecycleState",
-                None,
-            )
-            if lifecycle is not None and hasattr(
-                page,
-                "setLifecycleState",
-            ):
-                page.setLifecycleState(
-                    lifecycle.Active
-                )
-        except Exception:
-            pass
-
-        try:
-            self.browser.setUpdatesEnabled(True)
-            self.browser.update()
-            self.browser.viewport().update()
-        except Exception:
-            pass
-
-        try:
-            url = self.browser.url()
-            if url.scheme() in {"http", "https"}:
-                self.browser.page().runJavaScript(
-                    "window.dispatchEvent(new Event('resize'));"
-                )
-        except Exception:
-            pass
-
-    def _webengine_watchdog_tick(self) -> None:
-        if self._closing or not self._web_loading:
-            return
-
-        stalled_for = time.monotonic() - self._web_progress_at
-
-        if stalled_for < 0.9:
-            return
-
-        # This replaces the user's manual minimize/restore workaround.
-        # QtWebEngine/Chromium can stop presenting frames on Windows when its
-        # native occlusion state gets out of sync. Reasserting visibility and
-        # lifecycle wakes the renderer without reloading the notebook.
-        self._wake_webengine()
-        self._web_progress_at = time.monotonic()
-
-    def _page_loaded(self, ok: bool) -> None:
-        self._web_loading = False
-        self._web_load_progress = 100 if ok else self._web_load_progress
-
-        if not ok:
-            if self._page_retries < 2:
-                self._page_retries += 1
-                QTimer.singleShot(700, self.browser.reload)
-                return
-            self.save_status.setText("No se pudo cargar el editor")
-            return
-
-        self._page_retries = 0
-        if self.browser.url().scheme() not in {"http", "https"}:
-            return
-        self.manager.inject_shell(self.browser.page())
-        self._focus_notebook_editor()
-
-        QTimer.singleShot(
-            350,
-            self._focus_notebook_editor,
+    def _connect_kernel(self) -> None:
+        self.kernel.state_changed.connect(self._kernel_state_changed)
+        self.kernel.execution_finished.connect(
+            self._execution_finished
         )
-        QTimer.singleShot(
-            900,
-            self._focus_notebook_editor,
+        self.kernel.variables_ready.connect(
+            self.inspector.set_variables
         )
-        QTimer.singleShot(
-            500,
-            lambda: self.browser.page().runJavaScript(
-                "window.dispatchEvent(new Event('resize'));"
+        self.kernel.error.connect(self._kernel_error)
+
+    def _install_shortcuts(self) -> None:
+        QShortcut(
+            QKeySequence.StandardKey.Save,
+            self,
+            activated=self._save,
+        )
+        QShortcut(
+            QKeySequence("Shift+Return"),
+            self,
+            activated=self._run_cell,
+        )
+        QShortcut(
+            QKeySequence("Ctrl+Return"),
+            self,
+            activated=self._run_cell,
+        )
+
+    def _kernel_state_changed(
+        self,
+        state: str,
+        kernel_name: str,
+    ) -> None:
+        self.kernel_state = state
+        self.kernel_name = kernel_name
+
+        detail = {
+            "starting": "Iniciando kernel nativo…",
+            "busy": "Ejecutando celda…",
+            "idle": "Kernel local listo",
+            "dead": "Kernel detenido",
+        }.get(state, state)
+
+        self.kernel_status.setText(
+            f"{kernel_name} | {state}"
+        )
+        self.inspector.update_kernel(
+            kernel_name,
+            state,
+            detail,
+        )
+
+    def _kernel_error(self, message: str) -> None:
+        self.save_status.setText("Error de kernel")
+        QMessageBox.warning(
+            self,
+            "Kernel",
+            message,
+        )
+
+    def _execute_cell(
+        self,
+        cell_id: str,
+        code: str,
+    ) -> None:
+        if not code.strip():
+            return
+
+        self.save_status.setText("Ejecutando…")
+        self.kernel.execute(
+            code,
+            request_id=cell_id,
+        )
+
+    def _execution_finished(
+        self,
+        request_id: str,
+        output: str,
+        failed: bool,
+        execution_count: int,
+    ) -> None:
+        self.notebook_editor.apply_execution_result(
+            request_id,
+            output,
+            failed,
+            execution_count,
+        )
+        self.save_status.setText(
+            "Error en celda" if failed else "Ejecutado"
+        )
+        self.kernel.refresh_variables()
+
+    def _refresh_variables(self) -> None:
+        self.kernel.refresh_variables()
+
+    def _restart_kernel(self) -> None:
+        self.inspector.set_variables([])
+        self.kernel.restart()
+        self.save_status.setText("Reiniciando kernel…")
+
+    def _stop_kernel(self) -> None:
+        self.kernel.shutdown()
+        self.inspector.set_variables([])
+        self._kernel_state_changed(
+            "dead",
+            self.kernel_name,
+        )
+        self.save_status.setText("Kernel detenido")
+
+    def _show_kernel_details(self) -> None:
+        QMessageBox.information(
+            self,
+            "Kernel",
+            (
+                f"Kernel: {self.kernel_name}\n"
+                f"Estado: {self.kernel_state}\n"
+                f"Python: {sys.executable}\n"
+                f"Proyecto: {self.root_dir}"
             ),
         )
-        self.save_status.setText("Listo")
-
-    def _focus_notebook_editor(self) -> None:
-        if not self.active_document:
-            return
-
-        if not self.active_document.lower().endswith(".ipynb"):
-            return
-
-        self.browser.setFocus(
-            Qt.FocusReason.OtherFocusReason
-        )
-        self.browser.page().runJavaScript(
-            """
-            (() => {
-              if (
-                window.__archyterStudio
-                && window.__archyterStudio.focusEditor
-              ) {
-                return window.__archyterStudio.focusEditor();
-              }
-              return false;
-            })();
-            """
-        )
-
-    def _refresh_session(self) -> None:
-        if not self.active_document:
-            self.active_kernel_id = None
-            self.inspector.update_kernel(
-                "Python 3",
-                "sin sesión",
-                "Abre un notebook para iniciar.",
-            )
-            return
-
-        if (
-            self._session_refresh_pending
-            or self.manager.port is None
-        ):
-            return
-
-        self._session_refresh_pending = True
-        manager = self.manager
-        document = self.active_document
-
-        def worker() -> None:
-            session = None
-            try:
-                session = manager.active_session(document)
-            except Exception:
-                pass
-
-            if self._closing:
-                return
-
-            try:
-                self.session_refreshed.emit(
-                    {
-                        "manager": manager,
-                        "document": document,
-                        "session": session,
-                    }
-                )
-            except RuntimeError:
-                pass
-
-        threading.Thread(
-            target=worker,
-            name="archyter-session-refresh",
-            daemon=True,
-        ).start()
-
-    def _apply_session_snapshot(self, payload: object) -> None:
-        data = dict(payload or {})
-        self._session_refresh_pending = False
-
-        if (
-            data.get("manager") is not self.manager
-            or data.get("document") != self.active_document
-        ):
-            return
-
-        session = data.get("session")
-
-        if not session:
-            self.active_kernel_id = None
-            self.inspector.update_kernel(
-                "Python 3",
-                "sin sesión",
-                "Abre un notebook para iniciar.",
-            )
-            return
-
-        kernel = session.get("kernel") or {}
-        self.active_kernel_id = kernel.get("id")
-        self.active_kernel_name = kernel.get("name") or "python"
-        state = kernel.get("execution_state") or "activo"
-        minutes = int((time.time() - self.started_at) // 60)
-
-        self.inspector.update_kernel(
-            self.active_kernel_name,
-            state,
-            f"Actividad: {minutes} min · Jupyter local",
-        )
-        self.kernel_status.setText(
-            f"{self.active_kernel_name} | {state}"
-        )
-
-    def _refresh_dirty_state(self) -> None:
-        if not self.active_document:
-            return
-
-        def update(value) -> None:
-            self.save_status.setText("Cambios sin guardar" if value else "Guardado")
-
-        self.browser.page().runJavaScript(
-            "window.__archyterStudio ? window.__archyterStudio.dirty() : false",
-            update,
-        )
-
-    def _set_active_document(self, path: str | None) -> None:
-        self.active_document = os.path.abspath(path) if path else None
-        has_document = bool(self.active_document)
-        self.document_tab.setVisible(has_document)
-        self.save_button.setEnabled(has_document)
-        self.run_button.setEnabled(
-            bool(self.active_document and self.active_document.lower().endswith(".ipynb"))
-        )
-
-        if not self.active_document:
-            self.document_title.setText("Inicio")
-            self.document_path.setText(Path(self.root_dir).name)
-            return
-
-        target = Path(self.active_document)
-        self.document_title.setText(target.name)
-        try:
-            parent = target.parent.relative_to(Path(self.root_dir))
-            breadcrumb = Path(self.root_dir).name
-            if str(parent) != ".":
-                breadcrumb += f" / {parent.as_posix()}"
-        except ValueError:
-            breadcrumb = str(target.parent)
-        self.document_path.setText(breadcrumb)
-        self.document_path.setToolTip(str(target.parent))
 
     def _open_file(self, path: str) -> None:
         target = Path(path).resolve()
 
-        if self.manager.port is None:
-            self.save_status.setText(
-                "Jupyter todavía está iniciando…"
+        if target.suffix.lower() != ".ipynb":
+            QMessageBox.information(
+                self,
+                "Abrir archivo",
+                "Por ahora el editor central nativo abre notebooks .ipynb.",
             )
             return
 
         try:
-            if target.suffix.lower() == ".ipynb":
-                self.manager.prepare_notebook_metadata(str(target))
-
-            url = self.manager.open_url(str(target))
+            self.notebook_editor.load_file(str(target))
         except Exception as exc:
             QMessageBox.warning(
                 self,
-                "Abrir archivo",
+                "Abrir notebook",
                 str(exc),
             )
-            self.save_status.setText("No se pudo abrir")
             return
 
-        self._set_active_document(str(target))
+        self.active_document = str(target)
+        self.document_title.setText(target.name)
+        self.document_tab.show()
         self.explorer.set_active_path(str(target))
+        self.editor_stack.setCurrentWidget(self.notebook_editor)
+        self.save_button.setEnabled(True)
+        self.run_button.setEnabled(True)
+        self.save_status.setText("Listo")
 
-        # Navigate immediately. JupyterLab starts/attaches the kernel itself
-        # from the kernelspec metadata, so the editor is not held hostage by
-        # a session API round-trip.
-        self._wake_webengine()
-        self.browser.setUrl(QUrl(url))
-        self.browser.setFocus(Qt.FocusReason.OtherFocusReason)
-        self._wake_webengine()
-        self.save_status.setText("Cargando editor…")
+    def _show_welcome(self) -> None:
+        self.active_document = None
+        self.document_title.setText("Inicio")
+        self.document_tab.hide()
+        if hasattr(self, "editor_stack"):
+            self.editor_stack.setCurrentWidget(self.welcome)
+        if hasattr(self, "save_button"):
+            self.save_button.setEnabled(False)
+        if hasattr(self, "run_button"):
+            self.run_button.setEnabled(False)
+
+    def _dirty_changed(self, dirty: bool) -> None:
+        self.save_status.setText(
+            "Cambios sin guardar" if dirty else "Guardado"
+        )
+
+    def _save(self) -> None:
+        if not self.active_document:
+            return
+        try:
+            self.notebook_editor.save()
+            self.save_status.setText("Guardado")
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Guardar notebook",
+                str(exc),
+            )
+
+    def _run_cell(self) -> None:
+        if not self.active_document:
+            return
+        self.notebook_editor.execute_active()
 
     def _handle_new(self, kind: str) -> None:
-        directory = self.explorer.current_directory()
+        directory = Path(self.explorer.current_directory())
+        if not directory.is_dir():
+            directory = Path(self.root_dir)
+
         if kind == "notebook":
             self._new_notebook(directory)
         elif kind == "folder":
@@ -792,56 +548,133 @@ class StudioWindow(QMainWindow):
         else:
             self._new_text_file(directory)
 
-    def _new_notebook(self, directory: str) -> None:
-        try:
-            created = self.manager.create_notebook(directory)
-            self.explorer.refresh()
-            self._open_file(created)
-        except Exception as exc:
-            QMessageBox.warning(self, "Nuevo notebook", str(exc))
+    def _new_notebook(self, directory: Path) -> None:
+        base = "Untitled"
+        target = directory / f"{base}.ipynb"
+        counter = 1
 
-    def _new_folder(self, directory: str) -> None:
-        name, ok = QInputDialog.getText(self, "Nueva carpeta", "Nombre:")
-        name = name.strip()
-        if not ok or not name:
-            return
-        if any(token in name for token in ("/", "\\")) or name in {".", ".."}:
-            QMessageBox.warning(self, "Nueva carpeta", "Usa un nombre simple, sin rutas.")
-            return
-        target = Path(directory, name)
-        try:
-            target.mkdir()
-            self.explorer.refresh()
-        except FileExistsError:
-            QMessageBox.information(self, "Nueva carpeta", "Ya existe una carpeta con ese nombre.")
-        except Exception as exc:
-            QMessageBox.warning(self, "Nueva carpeta", str(exc))
+        while target.exists():
+            target = directory / f"{base}{counter}.ipynb"
+            counter += 1
 
-    def _new_text_file(self, directory: str) -> None:
-        name, ok = QInputDialog.getText(self, "Nuevo archivo", "Nombre:", text="notas.txt")
-        name = name.strip()
-        if not ok or not name:
-            return
-        if any(token in name for token in ("/", "\\")) or name in {".", ".."}:
-            QMessageBox.warning(self, "Nuevo archivo", "Usa un nombre simple, sin rutas.")
-            return
-        target = Path(directory, name)
-        if target.exists():
-            QMessageBox.information(self, "Nuevo archivo", "Ya existe un archivo con ese nombre.")
-            return
+        payload = {
+            "cells": [],
+            "metadata": {
+                "kernelspec": {
+                    "display_name": "Python 3 (ipykernel)",
+                    "language": "python",
+                    "name": "python3",
+                },
+                "language_info": {
+                    "name": "python",
+                },
+            },
+            "nbformat": 4,
+            "nbformat_minor": 5,
+        }
+
         try:
-            target.write_text("", encoding="utf-8")
+            target.write_text(
+                json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    indent=1,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
             self.explorer.refresh()
             self._open_file(str(target))
         except Exception as exc:
-            QMessageBox.warning(self, "Nuevo archivo", str(exc))
+            QMessageBox.warning(
+                self,
+                "Nuevo notebook",
+                str(exc),
+            )
+
+    def _new_folder(self, directory: Path) -> None:
+        name, ok = QInputDialog.getText(
+            self,
+            "Nueva carpeta",
+            "Nombre:",
+        )
+        name = name.strip()
+        if not ok or not name:
+            return
+
+        if any(token in name for token in ("/", "\\")) or name in {".", ".."}:
+            QMessageBox.warning(
+                self,
+                "Nueva carpeta",
+                "Usa un nombre simple, sin rutas.",
+            )
+            return
+
+        try:
+            (directory / name).mkdir()
+            self.explorer.refresh()
+        except FileExistsError:
+            QMessageBox.information(
+                self,
+                "Nueva carpeta",
+                "Ya existe una carpeta con ese nombre.",
+            )
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Nueva carpeta",
+                str(exc),
+            )
+
+    def _new_text_file(self, directory: Path) -> None:
+        name, ok = QInputDialog.getText(
+            self,
+            "Nuevo archivo",
+            "Nombre:",
+            text="notas.txt",
+        )
+        name = name.strip()
+        if not ok or not name:
+            return
+
+        if any(token in name for token in ("/", "\\")) or name in {".", ".."}:
+            QMessageBox.warning(
+                self,
+                "Nuevo archivo",
+                "Usa un nombre simple, sin rutas.",
+            )
+            return
+
+        target = directory / name
+        if target.exists():
+            QMessageBox.information(
+                self,
+                "Nuevo archivo",
+                "Ya existe un archivo con ese nombre.",
+            )
+            return
+
+        try:
+            target.write_text("", encoding="utf-8")
+            self.explorer.refresh()
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Nuevo archivo",
+                str(exc),
+            )
 
     def _delete_file(self, path: str) -> None:
         target = Path(path).resolve()
+
         try:
             target.relative_to(Path(self.root_dir).resolve())
         except ValueError:
-            QMessageBox.warning(self, "Eliminar", "El archivo está fuera del proyecto.")
+            QMessageBox.warning(
+                self,
+                "Eliminar",
+                "El archivo está fuera del proyecto.",
+            )
             return
 
         if not target.is_file():
@@ -852,189 +685,33 @@ class StudioWindow(QMainWindow):
             self,
             "Enviar a la papelera",
             f"¿Enviar «{target.name}» a la Papelera de reciclaje?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
+
         if answer != QMessageBox.StandardButton.Yes:
             return
 
         try:
-            try:
-                self.manager.close_session_for_path(str(target))
-            except Exception:
-                pass
             send2trash(str(target))
-            if self.active_document and Path(self.active_document).resolve() == target:
-                self._set_active_document(None)
+
+            if (
+                self.active_document
+                and Path(self.active_document).resolve() == target
+            ):
                 self._show_welcome()
+
             self.explorer.refresh()
-            self.save_status.setText(f"{target.name} enviado a la papelera")
+            self.save_status.setText(
+                f"{target.name} enviado a la papelera"
+            )
         except Exception as exc:
-            QMessageBox.critical(self, "Eliminar", str(exc))
-
-    def _save(self) -> None:
-        if not self.active_document:
-            return
-        self.save_status.setText("Guardando…")
-        self.browser.page().runJavaScript(
-            "window.__archyterStudio && window.__archyterStudio.save();"
-        )
-        QTimer.singleShot(450, lambda: self.save_status.setText("Guardado"))
-
-    def _run_cell(self) -> None:
-        if not self.active_document:
-            return
-        self.browser.page().runJavaScript(
-            "window.__archyterStudio && window.__archyterStudio.runCell();"
-        )
-
-    def _stop_kernel(self) -> None:
-        if not self.active_kernel_id:
-            QMessageBox.information(
+            QMessageBox.critical(
                 self,
-                "Kernel",
-                "No hay un kernel activo.",
+                "Eliminar",
+                str(exc),
             )
-            return
-
-        try:
-            self.manager.shutdown_kernel(self.active_kernel_id)
-            self.active_kernel_id = None
-            self.active_kernel_name = ""
-            self.inspector.set_variables([])
-            self.inspector.update_kernel(
-                "Python 3",
-                "detenido",
-                "Kernel detenido.",
-            )
-            self.save_status.setText("Kernel detenido")
-        except Exception as exc:
-            QMessageBox.warning(self, "Kernel", str(exc))
-
-    def _show_kernel_details(self) -> None:
-        if not self.active_kernel_id:
-            return
-
-        QMessageBox.information(
-            self,
-            "Kernel activo",
-            (
-                f"Kernel: {self.active_kernel_name}\n"
-                f"ID: {self.active_kernel_id}\n"
-                f"Jupyter: {self.manager.base_url}"
-            ),
-        )
-
-    def _open_terminal_window(self) -> None:
-        dialog = QDialog(self)
-        dialog.setWindowTitle("Archyter Studio — Terminal")
-        dialog.setWindowIcon(app_icon())
-        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        dialog.setStyleSheet(APP_STYLE)
-        dialog.resize(900, 560)
-
-        layout = QVBoxLayout(dialog)
-        layout.setContentsMargins(10, 10, 10, 10)
-
-        terminal = TerminalCard(self.root_dir)
-        layout.addWidget(terminal)
-        dialog.finished.connect(lambda _code: terminal.shutdown())
-        dialog.show()
-        dialog.raise_()
-        dialog.activateWindow()
-
-    def showEvent(self, event) -> None:
-        super().showEvent(event)
-        QTimer.singleShot(0, lambda: apply_light_titlebar(self))
-        QTimer.singleShot(0, self._wake_webengine)
-
-    def changeEvent(self, event) -> None:
-        super().changeEvent(event)
-
-        if event.type() in {
-            QEvent.Type.WindowStateChange,
-            QEvent.Type.ActivationChange,
-        }:
-            QTimer.singleShot(0, self._wake_webengine)
-
-    def _restart_kernel(self) -> None:
-        if not self.active_kernel_id:
-            QMessageBox.information(self, "Kernel", "No hay un kernel activo.")
-            return
-        try:
-            self.manager.restart_kernel(self.active_kernel_id)
-            self.save_status.setText("Kernel reiniciado")
-        except Exception as exc:
-            QMessageBox.warning(self, "Kernel", str(exc))
-
-    def _refresh_variables(self) -> None:
-        if not self.active_kernel_id:
-            self.inspector.set_variables([])
-            return
-
-        if self._variables_refresh_pending:
-            return
-
-        self._variables_refresh_pending = True
-        manager = self.manager
-        kernel_id = self.active_kernel_id
-        kernel_name = self.active_kernel_name
-
-        def worker() -> None:
-            variables: list[dict] = []
-            error = None
-
-            try:
-                variables = manager.variable_snapshot(
-                    kernel_id,
-                    kernel_name,
-                )
-            except Exception as exc:
-                error = str(exc)
-
-            if self._closing:
-                return
-
-            try:
-                self.variables_refreshed.emit(
-                    {
-                        "manager": manager,
-                        "kernel_id": kernel_id,
-                        "variables": variables,
-                        "error": error,
-                    }
-                )
-            except RuntimeError:
-                pass
-
-        threading.Thread(
-            target=worker,
-            name="archyter-variable-refresh",
-            daemon=True,
-        ).start()
-
-    def _apply_variables_snapshot(self, payload: object) -> None:
-        data = dict(payload or {})
-        self._variables_refresh_pending = False
-
-        if (
-            data.get("manager") is not self.manager
-            or data.get("kernel_id") != self.active_kernel_id
-        ):
-            return
-
-        error = data.get("error")
-        if error:
-            self._append_log(f"Variables: {error}")
-            self.inspector.set_variables([])
-            return
-
-        self.inspector.set_variables(
-            list(data.get("variables") or [])
-        )
-
-    def _focus_terminal(self) -> None:
-        self.inspector.terminal.input.setFocus()
 
     def _choose_project(self) -> None:
         folder = QFileDialog.getExistingDirectory(
@@ -1051,62 +728,49 @@ class StudioWindow(QMainWindow):
         if new_root == self.root_dir:
             return
 
-        self.save_status.setText("Cambiando proyecto…")
-        QApplication.processEvents()
+        self.kernel.shutdown()
 
-        self.manager.shutdown()
         self.root_dir = new_root
         self.settings.setValue("last_project", self.root_dir)
-        self.active_document = None
-        self.active_kernel_id = None
-        self.active_kernel_name = ""
-        self.started_at = time.time()
-
         self.explorer.set_root(self.root_dir)
         self.explorer.add_recent(self.root_dir)
         self.inspector.terminal.set_working_directory(self.root_dir)
         self.inspector.set_variables([])
-        self._set_active_document(None)
         self.project_status.setText(self.root_dir)
+        self._show_welcome()
 
-        self.manager = JupyterManager(self.root_dir)
-        self._wire_manager()
-        self._start_jupyter()
-
-    def _show_welcome(self) -> None:
-        self._set_active_document(None)
-        project_name = Path(self.root_dir).name or self.root_dir
-        safe_path = self.root_dir.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        html = f"""
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            html,body{{height:100%;margin:0;background:#fff;font-family:'Segoe UI',Arial,sans-serif;color:#172033}}
-            .wrap{{height:100%;display:flex;align-items:center;justify-content:center}}
-            .card{{width:min(660px,78%);border:1px solid #dbe6f0;border-radius:18px;padding:42px 48px;
-                   box-shadow:0 16px 50px rgba(48,91,130,.08);background:linear-gradient(145deg,#ffffff,#f8fbff)}}
-            .mark{{font-size:48px;font-weight:800;color:#168ed2;line-height:1}}
-            h1{{font-size:30px;margin:12px 0 8px}} p{{color:#64748b;line-height:1.6}}
-            .project{{margin-top:22px;padding:14px 16px;border-radius:10px;background:#eef7ff;color:#17639d;
-                      border:1px solid #d0e8fb;font-weight:600;word-break:break-all}}
-            .hint{{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap}}
-            .pill{{padding:9px 13px;border:1px solid #d8e4ef;border-radius:9px;color:#475569;background:#fff}}
-          </style>
-        </head>
-        <body><div class="wrap"><div class="card">
-          <div class="mark">A</div>
-          <h1>Archyter Studio</h1>
-          <p>Tu espacio de Jupyter para Windows. Crea un notebook o abre uno desde el proyecto.</p>
-          <div class="project">{project_name}<br><span style="font-weight:400;font-size:12px">{safe_path}</span></div>
-          <div class="hint"><div class="pill">＋ Nuevo notebook</div><div class="pill">📁 Proyecto</div><div class="pill">⌨ PowerShell</div></div>
-        </div></div></body></html>
-        """
-        self.browser.setHtml(html)
-        self.save_status.setText("Listo")
+        self.kernel = NativeKernelController(self.root_dir)
+        self._connect_kernel()
+        self.kernel.start()
 
     def _on_location_changed(self, directory: str) -> None:
         self.project_status.setText(directory)
+
+    def _focus_terminal(self) -> None:
+        self.inspector.terminal.input.setFocus()
+
+    def _open_terminal_window(self) -> None:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Archyter Studio — Terminal")
+        dialog.setWindowIcon(app_icon())
+        dialog.setAttribute(
+            Qt.WidgetAttribute.WA_DeleteOnClose,
+            True,
+        )
+        dialog.setStyleSheet(APP_STYLE)
+        dialog.resize(900, 560)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        terminal = TerminalCard(self.root_dir)
+        layout.addWidget(terminal)
+        dialog.finished.connect(
+            lambda _code: terminal.shutdown()
+        )
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
 
     def _search_project(self) -> None:
         term, ok = QInputDialog.getText(
@@ -1115,27 +779,44 @@ class StudioWindow(QMainWindow):
             "Texto a buscar:",
         )
         term = term.strip()
+
         if not ok or not term:
             return
 
         allowed = {
-            ".py", ".jl", ".md", ".txt", ".csv", ".json",
-            ".yaml", ".yml", ".ipynb", ".toml",
+            ".py",
+            ".jl",
+            ".md",
+            ".txt",
+            ".csv",
+            ".json",
+            ".yaml",
+            ".yml",
+            ".ipynb",
+            ".toml",
         }
         matches: list[Path] = []
         root = Path(self.root_dir)
 
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        QApplication.setOverrideCursor(
+            Qt.CursorShape.WaitCursor
+        )
         try:
             for path in root.rglob("*"):
                 if len(matches) >= 80:
                     break
-                if not path.is_file() or path.suffix.lower() not in allowed:
+                if (
+                    not path.is_file()
+                    or path.suffix.lower() not in allowed
+                ):
                     continue
                 try:
                     if path.stat().st_size > 2_000_000:
                         continue
-                    text = path.read_text(encoding="utf-8", errors="ignore")
+                    text = path.read_text(
+                        encoding="utf-8",
+                        errors="ignore",
+                    )
                 except OSError:
                     continue
                 if term.casefold() in text.casefold():
@@ -1147,50 +828,56 @@ class StudioWindow(QMainWindow):
             QMessageBox.information(
                 self,
                 "Buscar en proyecto",
-                f"No encontré «{term}» en los archivos de este proyecto.",
+                f"No encontré «{term}».",
             )
             return
 
-        labels = [str(path.relative_to(root)) for path in matches]
+        labels = [
+            str(path.relative_to(root))
+            for path in matches
+        ]
         selected, accepted = QInputDialog.getItem(
             self,
-            "Resultados de búsqueda",
-            f"{len(matches)} archivo(s) con «{term}»:",
+            "Resultados",
+            f"{len(matches)} archivo(s):",
             labels,
             0,
             False,
         )
+
         if accepted and selected:
             self._open_file(str(root / selected))
 
     def _git_status(self) -> None:
         self._focus_terminal()
-        self.inspector.terminal.send_command("git status --short --branch")
+        self.inspector.terminal.send_command(
+            "git status --short --branch"
+        )
 
     def _show_settings(self) -> None:
-        port = self.manager.port if self.manager.port is not None else "detenido"
         QMessageBox.information(
             self,
             "Archyter Studio",
             (
                 f"Proyecto:\n{self.root_dir}\n\n"
                 f"Python:\n{sys.executable}\n\n"
+                f"Kernel: {self.kernel_name}\n"
+                f"Estado: {self.kernel_state}\n"
                 f"Terminal: {self.inspector.terminal.shell_name}\n"
-                f"Jupyter local: {port}\n"
+                "Render: Qt nativo (sin Chromium)\n"
                 "Codificación: UTF-8"
             ),
         )
 
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        QTimer.singleShot(
+            0,
+            lambda: apply_light_titlebar(self),
+        )
+
     def closeEvent(self, event) -> None:
         self._closing = True
-
-        if hasattr(self, "state_timer"):
-            self.state_timer.stop()
-        if hasattr(self, "dirty_timer"):
-            self.dirty_timer.stop()
-        if hasattr(self, "web_watchdog"):
-            self.web_watchdog.stop()
-        if hasattr(self, "inspector"):
-            self.inspector.terminal.shutdown()
-        self.manager.shutdown()
+        self.inspector.terminal.shutdown()
+        self.kernel.shutdown()
         super().closeEvent(event)
