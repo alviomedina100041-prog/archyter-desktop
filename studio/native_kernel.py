@@ -205,6 +205,11 @@ class NativeKernelController(QObject):
             self._starting_generation = None
             self._ready.clear()
 
+            # A stale execution may still be unwinding on the previous
+            # client. Give the next kernel its own I/O lock immediately so
+            # an old get_iopub_msg timeout can never block new executions.
+            self._io_lock = threading.Lock()
+
             has_cleanup = bool(
                 manager
                 or client
@@ -316,6 +321,10 @@ class NativeKernelController(QObject):
         if not self.is_running:
             self.start()
 
+        with self._state_lock:
+            generation = self._generation
+            io_lock = self._io_lock
+
         def worker() -> None:
             if not self._ready.wait(
                 timeout=30
@@ -328,10 +337,12 @@ class NativeKernelController(QObject):
                 )
                 return
 
-            with self._state_lock:
-                generation = self._generation
+            if not self._is_current(
+                generation
+            ):
+                return
 
-            with self._io_lock:
+            with io_lock:
                 if not self._is_current(
                     generation
                 ):
@@ -614,6 +625,7 @@ print(
 
         with self._state_lock:
             generation = self._generation
+            io_lock = self._io_lock
 
         def worker() -> None:
             if not self._ready.wait(
@@ -624,7 +636,7 @@ print(
                 )
                 return
 
-            with self._io_lock:
+            with io_lock:
                 if not self._is_current(
                     generation
                 ):
