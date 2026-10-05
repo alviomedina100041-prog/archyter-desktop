@@ -163,6 +163,121 @@ class UiContractTests(unittest.TestCase):
                 window.kernel.shutdown()
                 window.close()
 
+
+    def test_cells_resize_insert_and_delete_without_layout_bloat(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            notebook = root / "cells.ipynb"
+            notebook.write_text(
+                json.dumps(
+                    {
+                        "cells": [
+                            {
+                                "cell_type": "code",
+                                "execution_count": None,
+                                "metadata": {},
+                                "outputs": [],
+                                "source": ["x = 1"],
+                            },
+                            {
+                                "cell_type": "code",
+                                "execution_count": None,
+                                "metadata": {},
+                                "outputs": [],
+                                "source": ["y = 2"],
+                            },
+                        ],
+                        "metadata": {},
+                        "nbformat": 4,
+                        "nbformat_minor": 5,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            window = self._window(root)
+            try:
+                window._open_file(str(notebook))
+                self.app.processEvents()
+
+                editor = window.notebook_editor
+                self.assertEqual(len(editor.cells), 2)
+
+                first = editor.cells[0]
+                compact_height = first.editor.height()
+
+                first.editor.setPlainText(
+                    "\n".join(
+                        f"value_{index} = {index}"
+                        for index in range(9)
+                    )
+                )
+                first.editor.update_height()
+                self.app.processEvents()
+
+                self.assertGreater(
+                    first.editor.height(),
+                    compact_height,
+                )
+                self.assertLess(
+                    first.editor.height(),
+                    260,
+                )
+
+                editor.activate_cell(first.cell_id)
+                editor.add_code_cell()
+                self.assertEqual(len(editor.cells), 3)
+                inserted = editor.active_cell()
+                self.assertIsNotNone(inserted)
+                self.assertEqual(inserted.cell_type, "code")
+                self.assertEqual(editor.cells[1].cell_id, inserted.cell_id)
+
+                editor.insert_cell_below(
+                    inserted.cell_id,
+                    "markdown",
+                )
+                self.assertEqual(len(editor.cells), 4)
+                markdown = editor.active_cell()
+                self.assertIsNotNone(markdown)
+                self.assertEqual(markdown.cell_type, "markdown")
+
+                editor.delete_cell(markdown.cell_id)
+                self.assertEqual(len(editor.cells), 3)
+
+                while len(editor.cells) > 1:
+                    editor.delete_cell(editor.cells[-1].cell_id)
+
+                editor.delete_cell(editor.cells[0].cell_id)
+                self.assertEqual(len(editor.cells), 1)
+                self.assertEqual(editor.cells[0].cell_type, "code")
+            finally:
+                window._closing = True
+                window.inspector.terminal.shutdown()
+                window.kernel.shutdown()
+                window.close()
+
+    def test_compact_window_gives_center_editor_priority(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            window = self._window(root)
+
+            try:
+                window.resize(1180, 760)
+                window.show()
+                self.app.processEvents()
+                window._apply_responsive_layout()
+
+                sizes = window.splitter.sizes()
+                self.assertEqual(len(sizes), 3)
+                self.assertGreater(sizes[1], sizes[0])
+                self.assertGreater(sizes[1], sizes[2])
+                self.assertGreaterEqual(sizes[1], 420)
+            finally:
+                window._closing = True
+                window.inspector.terminal.shutdown()
+                window.kernel.shutdown()
+                window.close()
+
     def test_main_window_matches_studio_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -217,7 +332,7 @@ class UiContractTests(unittest.TestCase):
 
                 self.assertGreaterEqual(
                     window.explorer.minimumWidth(),
-                    240,
+                    205,
                 )
                 self.assertLessEqual(
                     window.explorer.maximumWidth(),
@@ -225,7 +340,7 @@ class UiContractTests(unittest.TestCase):
                 )
                 self.assertGreaterEqual(
                     window.inspector.minimumWidth(),
-                    300,
+                    255,
                 )
                 self.assertLessEqual(
                     window.inspector.maximumWidth(),
