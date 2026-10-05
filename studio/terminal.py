@@ -103,12 +103,18 @@ class TerminalCard(QFrame):
         if text:
             self.output.appendPlainText(text)
 
-    def run_command(self) -> None:
-        command = self.input.text().strip()
+    def send_command(self, command: str) -> None:
+        command = command.strip()
         if not command or self.process.state() == QProcess.ProcessState.NotRunning:
             return
         self.output.appendPlainText(f"> {command}")
         self.process.write((command + os.linesep).encode("utf-8"))
+
+    def run_command(self) -> None:
+        command = self.input.text().strip()
+        if not command:
+            return
+        self.send_command(command)
         self.input.clear()
 
     def set_working_directory(self, path: str) -> None:
