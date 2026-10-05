@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from .animated import AnimatedToolButton
+from .delegates import CleanProjectTree, CleanTreeDelegate
 from .icons import icon
 
 
@@ -119,14 +120,18 @@ class ExplorerPanel(QFrame):
         )
         self.model.setRootPath(self.root_dir)
 
-        self.tree = QTreeView()
+        self.tree = CleanProjectTree()
         self.tree.setObjectName("ProjectTree")
         self.tree.setModel(self.model)
         self.tree.setRootIndex(self.model.index(self.root_dir))
         self.tree.setHeaderHidden(True)
         self.tree.setAnimated(True)
-        self.tree.setIndentation(16)
+        self.tree.setMouseTracking(True)
+        self.tree.setIndentation(15)
         self.tree.setIconSize(QSize(18, 18))
+        self.tree.setRootIsDecorated(True)
+        self.tree.setItemsExpandable(True)
+        self.tree.setItemDelegate(CleanTreeDelegate(self.tree))
         self.tree.setUniformRowHeights(True)
         self.tree.setEditTriggers(QTreeView.EditTrigger.NoEditTriggers)
         self.tree.setExpandsOnDoubleClick(True)
