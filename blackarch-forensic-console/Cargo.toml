@@ -5,7 +5,7 @@ edition = "2021"
 authors = ["BlackArch Forensic Console contributors"]
 description = "High-performance Windows DFIR console for Arch/BlackArch on WSL2"
 license = "MIT"
-repository = "https://github.com/OWNER/blackarch-forensic-console"
+repository = "https://github.com/alviomedina100041-prog/archyter-desktop"
 
 [profile.release]
 opt-level = 3
