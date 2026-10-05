@@ -21,6 +21,8 @@ export const api = {
     invoke<WslStatus>("probe_wsl_status", { distro }),
   forensicTools: (distro: string) =>
     invoke<string[]>("forensic_tools", { distro }),
+  exportCaseReport: (caseId: string) =>
+    invoke<string>("export_case_report", { caseId }),
   terminalWrite: (data: string) => invoke<void>("terminal_write", { data }),
   terminalStop: () => invoke<void>("terminal_stop"),
 };
