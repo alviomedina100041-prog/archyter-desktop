@@ -1,0 +1,170 @@
+            if state.terminal_focus {
+                match wparam as u32 {
+                    8 => { state.command_input.pop(); }
+                    13 => { execute_terminal_command(state); }
+                    9 => { state.command_input.push_str("    "); }
+                    ch if ch >= 32 && ch != 127 => {
+                        if let Some(c) = char::from_u32(ch) { state.command_input.push(c); }
+                    }
+                    _ => {}
+                }
+                InvalidateRect(hwnd, null(), 0);
+            }
+            0
+        }
+        WM_KEYDOWN => {
+            if state.terminal_focus && wparam as i32 == 'V' as i32 && (GetKeyState(VK_CONTROL) as u16 & 0x8000) != 0 {
+                if let Some(text) = clipboard_text(hwnd) { state.command_input.push_str(&text.replace(['\r','\n'], " ")); }
+                InvalidateRect(hwnd, null(), 0);
+                return 0;
+            }
+            DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
+        WM_DROPFILES => { handle_drop(state, wparam as HDROP); InvalidateRect(hwnd, null(), 0); 0 }
+        WM_APP_ASYNC => {
+            let ptr = lparam as *mut AsyncPayload;
+            if !ptr.is_null() {
+                let payload = *Box::from_raw(ptr);
+                handle_async(state, payload);
+                state.busy_jobs = state.busy_jobs.saturating_sub(1);
+                InvalidateRect(hwnd, null(), 0);
+            }
+            0
+        }
+        _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    }
+}
+
+unsafe fn clipboard_text(hwnd: HWND) -> Option<String> {
+    if IsClipboardFormatAvailable(CF_UNICODETEXT) == 0 || OpenClipboard(hwnd) == 0 { return None; }
+    let handle = GetClipboardData(CF_UNICODETEXT);
+    if handle.is_null() { CloseClipboard(); return None; }
+    let ptr = GlobalLock(handle) as *const u16;
+    if ptr.is_null() { CloseClipboard(); return None; }
+    let mut len = 0usize;
+    while *ptr.add(len) != 0 && len < 1_000_000 { len += 1; }
+    let s = String::from_utf16_lossy(std::slice::from_raw_parts(ptr, len));
+    GlobalUnlock(handle); CloseClipboard(); Some(s)
+}
+
+unsafe fn start_probe() {
+    if APP.is_null() { return; }
+    let state = &mut *APP;
+    let hwnd_bits = state.hwnd as isize;
+    let distro = state.distro.clone();
+    state.busy_jobs += 1;
+    thread::spawn(move || {
+        let result = wsl::probe_blackarch(&distro).map_err(|e| e.to_string());
+        post_async(hwnd_bits, AsyncPayload::Probe { result });
+    });
+}
+
+unsafe fn execute_terminal_command(state: &mut AppState) {
+    let command = state.command_input.trim().to_string();
+    if command.is_empty() { return; }
+    state.command_input.clear();
+    state.push_terminal(format!("blackarch@wsl2 ~ $ {command}"));
+    state.status = format!("Running: {command}");
+    state.busy_jobs += 1;
+    let hwnd_bits = state.hwnd as isize;
+    let distro = state.distro.clone();
+    thread::spawn(move || {
+        let result = wsl::run_shell(&distro, &command).map_err(|e| e.to_string());
+        post_async(hwnd_bits, AsyncPayload::Terminal { command, result });
+    });
+}
+
+fn post_async(hwnd_bits: isize, payload: AsyncPayload) {
+    let ptr = Box::into_raw(Box::new(payload));
+    unsafe {
+        if PostMessageW(hwnd_bits as HWND, WM_APP_ASYNC, 0, ptr as LPARAM) == 0 {
+            drop(Box::from_raw(ptr));
+        }
+    }
+}
+
+unsafe fn handle_async(state: &mut AppState, payload: AsyncPayload) {
+    match payload {
+        AsyncPayload::Terminal { command: _, result } => match result {
+            Ok(result) => {
+                let text = result.merged_text();
+                if !text.is_empty() { state.push_terminal(text); }
+                state.status = if result.success { format!("Command completed in {} ms", result.elapsed.as_millis()) } else { format!("Command failed ({:?})", result.status_code) };
+            }
+            Err(error) => { state.push_terminal(format!("[error] {error}")); state.status = "Command failed".into(); }
+        },
+        AsyncPayload::Probe { result } => match result {
+            Ok(result) => {
+                state.wsl_online = result.success;
+                let text = result.merged_text();
+                for line in text.lines() {
+                    if let Some(v) = line.strip_prefix("TOOLS=") { state.tools_installed = v.trim().parse().unwrap_or(state.tools_installed); }
+                }
+                state.status = if state.wsl_online { "WSL2 / BlackArch online".into() } else { "WSL2 probe returned errors".into() };
+            }
+            Err(error) => { state.wsl_online = false; state.status = format!("WSL2 unavailable: {error}"); }
+        },
+        AsyncPayload::Hash { index, result } => match result {
+            Ok(hash) => {
+                if let Some(ev) = state.case.evidence.get_mut(index) { ev.sha256 = Some(hash.clone()); ev.verified = true; }
+                state.push_terminal(format!("SHA256 verified: {hash}"));
+                state.status = "Evidence hash completed".into();
+                state.case.timeline.push(TimelineEvent { time: "now".into(), message: "Hash verification completed (SHA256)".into(), category: "Integrity".into(), severity: Severity::Low });
+            }
+            Err(error) => { state.push_terminal(format!("[hash error] {error}")); state.status = "Hash failed".into(); }
+        },
+        AsyncPayload::Postgres { result } => match result {
+            Ok(audit) => {
+                state.case.audit = audit.summary.clone();
+                state.push_terminal(audit.report.clone());
+                state.status = format!("PostgreSQL audit completed in {} ms", audit.elapsed_ms);
+                state.case.findings.retain(|f| !f.title.starts_with("PostgreSQL:"));
+                if audit.summary.tables_exposed > 0 {
+                    state.case.findings.insert(0, Finding { severity: Severity::High, title: "PostgreSQL: tables exposed to PUBLIC".into(), detail: "PUBLIC has direct privileges on application tables.".into(), count: audit.summary.tables_exposed });
+                }
+                if audit.summary.risky_access > 0 {
+                    state.case.findings.insert(0, Finding { severity: Severity::Critical, title: "PostgreSQL: risky role or schema privileges".into(), detail: "Review superuser/role-creation/database-creation/bypass-RLS or PUBLIC CREATE access.".into(), count: audit.summary.risky_access });
+                }
+                state.case.timeline.push(TimelineEvent { time: "now".into(), message: "PostgreSQL privilege audit completed".into(), category: "Database".into(), severity: Severity::Medium });
+            }
+            Err(error) => { state.push_terminal(format!("[postgres audit error] {error}")); state.status = "PostgreSQL audit failed".into(); }
+        },
+        AsyncPayload::Scan { root, result } => match result {
+            Ok(scan) => {
+                state.case.project_path = Some(root.clone());
+                state.case.findings.extend(scan.findings);
+                state.push_terminal(format!("Project scan: {} files seen, {} text files read, {} large files skipped, {} errors", scan.stats.files_seen, scan.stats.files_read, scan.stats.skipped_large, scan.stats.errors));
+                state.status = format!("Project scan completed: {} files", scan.stats.files_seen);
+                state.case.timeline.push(TimelineEvent { time: "now".into(), message: format!("Scanned project directory ({} files)", scan.stats.files_seen), category: "File System".into(), severity: Severity::Info });
+            }
+            Err(error) => { state.push_terminal(format!("[project scan error] {error}")); state.status = "Project scan failed".into(); }
+        },
+    }
+}
+
+unsafe fn handle_drop(state: &mut AppState, drop: HDROP) {
+    let count = DragQueryFileW(drop, 0xFFFF_FFFF, null_mut(), 0);
+    for i in 0..count.min(16) {
+        let len = DragQueryFileW(drop, i, null_mut(), 0);
+        if len == 0 { continue; }
+        let mut buf = vec![0u16; len as usize + 1];
+        DragQueryFileW(drop, i, buf.as_mut_ptr(), buf.len() as u32);
+        let path = PathBuf::from(String::from_utf16_lossy(&buf[..len as usize]));
+        if path.is_dir() {
+            start_project_scan(state, path);
+        } else if let Ok(ev) = Evidence::from_path(path.clone()) {
+            state.case.evidence.push(ev);
+            state.selected_evidence = state.case.evidence.len() - 1;
+            state.status = format!("Evidence added: {}", path.display());
+            start_hash(state, state.selected_evidence);
+        }
+    }
+    DragFinish(drop);
+}
+
+unsafe fn start_hash(state: &mut AppState, index: usize) {
+    let Some(ev) = state.case.evidence.get(index) else { return; };
+    let path = ev.path.clone();
+    let hwnd_bits = state.hwnd as isize;
+    state.busy_jobs += 1;
+    state.status = format!("Hashing {}...", ev.name);
