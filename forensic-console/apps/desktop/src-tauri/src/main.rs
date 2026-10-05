@@ -15,6 +15,7 @@ fn main() {
             commands::read_hex_chunk,
             commands::probe_wsl_status,
             commands::forensic_tools,
+            commands::export_case_report,
             terminal::terminal_start,
             terminal::terminal_write,
             terminal::terminal_resize,
