@@ -1,0 +1,14 @@
+{
+  "name": "blackarch-forensic-console-monorepo",
+  "private": true,
+  "version": "0.2.0",
+  "workspaces": [
+    "apps/desktop"
+  ],
+  "scripts": {
+    "dev": "npm --workspace @blackarch/forensic-desktop run tauri:dev",
+    "build": "npm --workspace @blackarch/forensic-desktop run tauri:build",
+    "frontend:build": "npm --workspace @blackarch/forensic-desktop run build",
+    "frontend:check": "npm --workspace @blackarch/forensic-desktop run typecheck"
+  }
+}
