@@ -214,7 +214,7 @@ impl CaseRepository {
         markdown.push_str(&format!("# Forensic Case Report — {}\n\n", case.name));
         markdown.push_str(&format!("- **Case ID:** {}\n", case.id));
         markdown.push_str(&format!("- **Created:** {}\n", case.created_at));
-        markdown.push_str(&format!("- **Case root:** \`{}\`\n\n", case.root_dir));
+        markdown.push_str(&format!("- **Case root:** `{}`\n\n", case.root_dir));
 
         markdown.push_str("## Evidence\n\n");
         if case.evidence.is_empty() {
@@ -222,7 +222,7 @@ impl CaseRepository {
         } else {
             for evidence in &case.evidence {
                 markdown.push_str(&format!(
-                    "### {}\n\n- Path: \`{}\`\n- Size: {} bytes\n- SHA-256: \`{}\`\n- Added: {}\n- Last verified: {}\n- Read-only registration: {}\n\n",
+                    "### {}\n\n- Path: `{}`\n- Size: {} bytes\n- SHA-256: `{}`\n- Added: {}\n- Last verified: {}\n- Read-only registration: {}\n\n",
                     evidence.name,
                     evidence.path,
                     evidence.size,
