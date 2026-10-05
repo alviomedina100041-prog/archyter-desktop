@@ -54,6 +54,14 @@ pub struct FileEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
+pub struct HexChunk {
+    pub offset: u64,
+    pub bytes: Vec<u8>,
+    pub eof: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct WslStatus {
     pub online: bool,
     pub distro: String,
