@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import (
@@ -18,6 +19,12 @@ from PySide6.QtWidgets import QApplication, QStyle
 
 
 SIZE = 64
+ASSET_ROOT = Path(__file__).resolve().parents[1] / "assets"
+ASSET_ICONS = {
+    "app": "icon.svg",
+    "python": "python-logo.svg",
+}
+
 
 
 def _pen(color: str, width: float = 4.0) -> QPen:
@@ -350,6 +357,14 @@ def icon(
     name: str,
     fallback: QStyle.StandardPixmap | None = None,
 ) -> QIcon:
+    asset_name = ASSET_ICONS.get(name)
+    if asset_name:
+        asset_path = ASSET_ROOT / asset_name
+        if asset_path.is_file():
+            asset_icon = QIcon(str(asset_path))
+            if not asset_icon.isNull():
+                return asset_icon
+
     candidate = _painted_icon(name)
     if not candidate.isNull():
         return candidate
