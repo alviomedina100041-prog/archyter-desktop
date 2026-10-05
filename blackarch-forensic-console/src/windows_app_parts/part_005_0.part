@@ -1,0 +1,55 @@
+    text(dc,&state.ui,&format!("WSL2: Arch/BlackArch   {}",if state.wsl_online{"Online"}else{"Offline"}),R{x:status.x+28,y:status.y,w:status.w-32,h:status.h},if state.wsl_online{state.theme.text}else{state.theme.red},FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+    let case=R{x:status.right()+8,y:10,w:case_w,h:30}; panel(dc,case,state.theme.panel,state.theme.border_soft,6);
+    draw_person(dc,case.x+16,case.y+15,state.theme.muted);
+    text(dc,&state.ui,&format!("Case: {}",state.case.id),R{x:case.x+31,y:case.y,w:case.w-40,h:case.h},state.theme.text,FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+}
+
+unsafe fn draw_sidebar(dc:HDC,state:&AppState,l:&Layout){
+    fill(dc,l.sidebar,rgb(4,14,18)); line(dc,l.sidebar.right()-1,l.sidebar.y,l.sidebar.right()-1,l.client.h,state.theme.border_soft,1);
+    for (i,item) in NavItem::ALL.iter().copied().enumerate(){
+        let r=R{x:4,y:64+i as i32*48,w:184,h:44};
+        let selected=state.nav==item; let hover=state.hover_nav==Some(i);
+        if selected { fill(dc,r,rgb(5,35,31)); fill(dc,R{x:r.x,y:r.y,w:4,h:r.h},state.theme.green); }
+        else if hover { fill(dc,r,rgb(8,25,30)); }
+        draw_nav_icon(dc,item,r.x+31,r.y+22,if selected{state.theme.green}else{rgb(181,199,210)});
+        text(dc,&state.ui,item.label(),R{x:r.x+57,y:r.y,w:r.w-60,h:r.h},if selected{state.theme.green}else{rgb(196,210,217)},FontKind::Normal,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+    }
+    let card=R{x:10,y:l.client.h-330,w:174,h:170}; panel(dc,card,state.theme.panel,state.theme.border,7);
+    dot(dc,card.x+16,card.y+21,6,state.theme.green); text(dc,&state.ui,"WSL2 / BlackArch",R{x:card.x+29,y:card.y+7,w:135,h:28},state.theme.text,FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    text(dc,&state.ui,if state.wsl_online{"✓  Running"}else{"✕  Offline"},R{x:card.x+12,y:card.y+34,w:145,h:20},if state.wsl_online{state.theme.green}else{state.theme.red},FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    let tools = format!("{} installed", state.tools_installed);
+    let lines=[("Distro:","Arch Linux"),("Kernel:","WSL2"),("Uptime:","active"),("Tools:",tools.as_str())];
+    for (i,(k,v)) in lines.iter().enumerate(){let y=card.y+61+i as i32*22;text(dc,&state.ui,k,R{x:card.x+12,y,w:52,h:18},state.theme.muted,FontKind::Small,DT_LEFT|DT_SINGLELINE);text(dc,&state.ui,v,R{x:card.x+66,y,w:96,h:18},state.theme.text,FontKind::Small,DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS);}
+    let stats=R{x:10,y:l.client.h-150,w:174,h:140}; panel(dc,stats,state.theme.panel,state.theme.border,7);
+    text(dc,&state.ui,"CPU",R{x:stats.x+30,y:stats.y+10,w:70,h:18},state.theme.muted,FontKind::Small,DT_LEFT|DT_SINGLELINE); text(dc,&state.ui,&format!("{}%",state.stats.cpu_percent),R{x:stats.x+105,y:stats.y+10,w:55,h:18},state.theme.text,FontKind::Small,DT_RIGHT|DT_SINGLELINE);
+    text(dc,&state.ui,"Memory",R{x:stats.x+30,y:stats.y+36,w:70,h:18},state.theme.muted,FontKind::Small,DT_LEFT|DT_SINGLELINE); text(dc,&state.ui,&format!("{:.1}/{:.1} GB",state.stats.memory_used_gb_x10 as f32/10.0,state.stats.memory_total_gb_x10 as f32/10.0),R{x:stats.x+88,y:stats.y+36,w:72,h:18},state.theme.text,FontKind::Small,DT_RIGHT|DT_SINGLELINE);
+    text(dc,&state.ui,"Disk (C:)",R{x:stats.x+30,y:stats.y+62,w:70,h:18},state.theme.muted,FontKind::Small,DT_LEFT|DT_SINGLELINE); text(dc,&state.ui,&format!("{}%",state.stats.disk_used_percent),R{x:stats.x+110,y:stats.y+62,w:50,h:18},state.theme.text,FontKind::Small,DT_RIGHT|DT_SINGLELINE);
+    draw_sparkline(dc,R{x:stats.x+12,y:stats.y+90,w:150,h:36},&state.resource_history,state.theme.green);
+}
+
+unsafe fn draw_case_explorer(dc:HDC,state:&AppState,r:R){
+    panel(dc,r,state.theme.panel,state.theme.border,6);
+    text(dc,&state.ui,"▣  Case Explorer",R{x:r.x+12,y:r.y+6,w:r.w-55,h:30},state.theme.text,FontKind::Normal,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    text(dc,&state.ui,"⌕   +",R{x:r.right()-58,y:r.y+6,w:48,h:30},state.theme.muted,FontKind::Normal,DT_RIGHT|DT_VCENTER|DT_SINGLELINE);
+    line(dc,r.x,r.y+40,r.right(),r.y+40,state.theme.border_soft,1);
+    let mut y=r.y+52;
+    text(dc,&state.ui,&format!("⌄  📁  Case {}",state.case.id),R{x:r.x+14,y,w:r.w-24,h:24},state.theme.text,FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS); y+=27;
+    text(dc,&state.ui,"   ⌄  📁  Evidence",R{x:r.x+21,y,w:r.w-28,h:24},state.theme.text,FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE); y+=27;
+    for (idx,ev) in state.case.evidence.iter().take(4).enumerate(){
+        let row=R{x:r.x+39,y,w:r.w-48,h:24}; if idx==state.selected_evidence{fill(dc,row,state.theme.panel3);} draw_file_icon(dc,row.x+13,row.y+12,state.theme.muted);
+        text(dc,&state.ui,&ev.name,R{x:row.x+29,y:row.y,w:row.w-33,h:row.h},if idx==state.selected_evidence{state.theme.text}else{state.theme.muted},FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS); y+=25;
+    }
+    text(dc,&state.ui,"   ⌄  📁  Projects",R{x:r.x+21,y,w:r.w-28,h:24},state.theme.text,FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE); y+=26;
+    text(dc,&state.ui,"      ⌄  📁  erp_project_backend",R{x:r.x+30,y,w:r.w-38,h:24},state.theme.text,FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS); y+=25;
+    for name in ["app","config","database","logs","src"]{text(dc,&state.ui,&format!("          ▷  ▰  {name}"),R{x:r.x+37,y,w:r.w-45,h:23},state.theme.muted,FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE); y+=23;}
+    text(dc,&state.ui,"   ⌄  📁  Analysis",R{x:r.x+21,y,w:r.w-28,h:24},state.theme.text,FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE); y+=25;
+    for name in ["timeline","volatile","artifacts"]{text(dc,&state.ui,&format!("       ▷  ▰  {name}"),R{x:r.x+31,y,w:r.w-40,h:22},state.theme.muted,FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE); y+=22;}
+    text(dc,&state.ui,"   ⌄  📁  Reports",R{x:r.x+21,y,w:r.w-28,h:24},state.theme.text,FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE); y+=25;
+    text(dc,&state.ui,&format!("       ▣  {}_Report.md",state.case.id),R{x:r.x+31,y,w:r.w-40,h:22},state.theme.muted,FontKind::Small,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+}
+
+unsafe fn draw_terminal(dc:HDC,state:&AppState,r:R){
+    panel(dc,r,state.theme.panel,state.theme.border,6);
+    let labels=["Terminal","Python","PostgreSQL","Tools"];
+    for (i,label) in labels.iter().enumerate(){
+        let tr=R{x:r.x+8+i as i32*116,y:r.y+5,w:108,h:34};
