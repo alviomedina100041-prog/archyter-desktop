@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from PySide6.QtWidgets import (
 )
 
 from .icons import icon
+
+ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 
 
 def detect_shell() -> tuple[str, list[str], str]:
@@ -52,6 +55,8 @@ class TerminalCard(QFrame):
 
         env = QProcessEnvironment.systemEnvironment()
         env.insert("PYTHONUTF8", "1")
+        env.insert("NO_COLOR", "1")
+        env.insert("TERM", "dumb")
         self.process.setProcessEnvironment(env)
 
         self.process.readyReadStandardOutput.connect(self._read_output)
@@ -94,7 +99,7 @@ class TerminalCard(QFrame):
 
     def _read_output(self) -> None:
         data = bytes(self.process.readAllStandardOutput()).decode("utf-8", errors="replace")
-        text = data.replace("\r", "").strip("\n")
+        text = ANSI_RE.sub("", data).replace("\r", "").strip("\n")
         if text:
             self.output.appendPlainText(text)
 
