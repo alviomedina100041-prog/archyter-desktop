@@ -508,4 +508,78 @@ QPlainTextEdit#CellOutput[error="true"] {
     border-color: #f3c3c3;
 }
 
+
+QWidget#NotebookCanvas {
+    background: #ffffff;
+}
+
+QLabel#CellType {
+    color: #7f8da0;
+    font-size: 9px;
+    padding: 2px 5px;
+    background: #f5f8fb;
+    border: 1px solid #e7edf3;
+    border-radius: 6px;
+}
+
+QToolButton#CellActionButton {
+    min-width: 24px;
+    max-width: 24px;
+    min-height: 22px;
+    max-height: 22px;
+    padding: 2px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+}
+
+QToolButton#CellActionButton:hover {
+    background: #eaf5ff;
+    border: none;
+}
+
+QToolButton#CellDeleteButton {
+    min-width: 24px;
+    max-width: 24px;
+    min-height: 22px;
+    max-height: 22px;
+    padding: 2px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+}
+
+QToolButton#CellDeleteButton:hover {
+    background: #fff0f2;
+    border: none;
+}
+
+QPushButton#NotebookDeleteButton {
+    background: #ffffff;
+    color: #a43c45;
+    border: 1px solid #f0d5d8;
+    border-radius: 7px;
+    padding: 5px 9px;
+    min-height: 22px;
+}
+
+QPushButton#NotebookDeleteButton:hover {
+    background: #fff1f2;
+    color: #922f39;
+    border-color: #eeb4ba;
+}
+
+QFrame#NativeCell {
+    margin: 0;
+}
+
+QFrame#NativeCell[active="true"] {
+    border-left: 3px solid #149fe2;
+}
+
+QPlainTextEdit#CellEditor,
+QPlainTextEdit#CellOutput {
+    margin: 0;
+}
+
 """
