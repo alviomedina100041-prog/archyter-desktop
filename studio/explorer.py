@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import QDir, QModelIndex, QSettings, QSize, Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QFileSystemModel,
     QFrame,
@@ -145,6 +146,13 @@ class ExplorerPanel(QFrame):
         self.tree.setEditTriggers(QTreeView.EditTrigger.NoEditTriggers)
         self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._show_context_menu)
+        self.rename_shortcut = QShortcut(
+            QKeySequence("F2"),
+            self.tree,
+        )
+        self.rename_shortcut.activated.connect(
+            self._rename_selected
+        )
         self.tree.setExpandsOnDoubleClick(True)
         self.tree.setAllColumnsShowFocus(False)
         self.tree.clicked.connect(self._clicked)
