@@ -8,6 +8,10 @@ on:
       - ".github/workflows/blackarch-forensic-tauri.yml"
   workflow_dispatch:
 
+concurrency:
+  group: blackarch-forensic-tauri-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows:
     runs-on: windows-latest
