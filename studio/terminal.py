@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from pathlib import Path
 
 from PySide6.QtCore import QProcess, QProcessEnvironment, Signal
 from PySide6.QtWidgets import (
