@@ -404,4 +404,108 @@ QToolTip {
     border: 1px solid #334155;
     padding: 5px 7px;
 }
+
+QLabel#StudioWelcome {
+    background: #ffffff;
+    border: 1px solid #e1e8ef;
+    border-radius: 12px;
+    color: #172033;
+}
+
+QFrame#NativeNotebook {
+    background: #ffffff;
+    border: none;
+}
+
+QFrame#NativeNotebookToolbar {
+    background: #ffffff;
+    border: 1px solid #e2e9f0;
+    border-radius: 8px;
+}
+
+QPushButton#NotebookToolButton {
+    background: #ffffff;
+    border: 1px solid #d7e2ec;
+    border-radius: 7px;
+    padding: 5px 9px;
+    min-height: 22px;
+}
+
+QPushButton#NotebookToolButton:hover {
+    background: #eef7ff;
+    border-color: #96c9f2;
+}
+
+QScrollArea#NotebookScroll {
+    background: #ffffff;
+    border: none;
+}
+
+QScrollArea#NotebookScroll > QWidget > QWidget {
+    background: #ffffff;
+}
+
+QFrame#NativeCell {
+    background: #ffffff;
+    border: 1px solid #dce5ed;
+    border-left: 3px solid transparent;
+    border-radius: 10px;
+}
+
+QFrame#NativeCell:hover {
+    border-color: #bfd2e4;
+}
+
+QFrame#NativeCell[active="true"] {
+    border-color: #8ac9f2;
+    border-left-color: #149fe2;
+    background: #ffffff;
+}
+
+QLabel#CellPrompt {
+    color: #7b8ba0;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+    font-size: 10px;
+}
+
+QPushButton#CellRunButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 3px;
+}
+
+QPushButton#CellRunButton:hover {
+    background: #eaf5ff;
+}
+
+QPlainTextEdit#CellEditor {
+    background: #ffffff;
+    color: #172033;
+    border: 1px solid #e1e8ef;
+    border-radius: 7px;
+    padding: 7px 8px;
+    selection-background-color: #dceeff;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+}
+
+QPlainTextEdit#CellEditor:focus {
+    border: 1px solid #6ab7eb;
+}
+
+QPlainTextEdit#CellOutput {
+    background: #fbfdff;
+    color: #26384d;
+    border: 1px solid #edf1f5;
+    border-radius: 7px;
+    padding: 7px 8px;
+    font-family: "Cascadia Mono", "Consolas", monospace;
+}
+
+QPlainTextEdit#CellOutput[error="true"] {
+    background: #fff6f6;
+    color: #a12b2b;
+    border-color: #f3c3c3;
+}
+
 """
