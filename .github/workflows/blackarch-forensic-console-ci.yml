@@ -1,0 +1,28 @@
+name: BlackArch Forensic Console CI
+
+on:
+  push:
+    branches: [blackarch-forensic-console]
+  workflow_dispatch:
+
+jobs:
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Extract source package
+        shell: pwsh
+        run: |
+          if (Test-Path blackarch-forensic-console) { Remove-Item -Recurse -Force blackarch-forensic-console }
+          Expand-Archive -Path blackarch-forensic-console-source.zip -DestinationPath blackarch-forensic-console
+      - name: Format check
+        run: cargo fmt --manifest-path blackarch-forensic-console/Cargo.toml --all -- --check
+      - name: Unit tests
+        run: cargo test --manifest-path blackarch-forensic-console/Cargo.toml --all
+      - name: Clippy
+        run: cargo clippy --manifest-path blackarch-forensic-console/Cargo.toml --all-targets --all-features -- -D warnings
+      - name: Optimized release build
+        run: cargo build --release --manifest-path blackarch-forensic-console/Cargo.toml
