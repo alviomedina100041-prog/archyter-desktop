@@ -3,7 +3,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
-from PySide6.QtCore import QPointF, QRectF, Qt
+from PySide6.QtCore import QPointF, QRectF, QSize, Qt
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -15,6 +15,7 @@ from PySide6.QtGui import (
     QPixmap,
     QPolygonF,
 )
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import QApplication, QStyle
 
 
@@ -25,6 +26,59 @@ ASSET_ICONS = {
     "python": "python-logo.svg",
 }
 
+
+
+@lru_cache(maxsize=24)
+def asset_pixmap(name: str, size: int = 64) -> QPixmap:
+    asset_name = ASSET_ICONS.get(name)
+    if not asset_name:
+        return QPixmap()
+
+    asset_path = ASSET_ROOT / asset_name
+    if not asset_path.is_file():
+        return QPixmap()
+
+    renderer = QSvgRenderer(str(asset_path))
+    if not renderer.isValid():
+        return QPixmap()
+
+    pixel_size = max(16, int(size))
+    pixmap = QPixmap(pixel_size, pixel_size)
+    pixmap.fill(Qt.GlobalColor.transparent)
+
+    painter = QPainter(pixmap)
+    painter.setRenderHint(
+        QPainter.RenderHint.Antialiasing,
+        True,
+    )
+    renderer.render(
+        painter,
+        QRectF(
+            0,
+            0,
+            pixel_size,
+            pixel_size,
+        ),
+    )
+    painter.end()
+    return pixmap
+
+
+@lru_cache(maxsize=24)
+def asset_icon(name: str) -> QIcon:
+    pixmap = asset_pixmap(name, 256)
+    if pixmap.isNull():
+        return QIcon()
+
+    result = QIcon()
+    for size in (16, 20, 24, 32, 48, 64, 128, 256):
+        scaled = pixmap.scaled(
+            QSize(size, size),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.SmoothTransformation,
+        )
+        result.addPixmap(scaled)
+    return result
 
 
 def _pen(color: str, width: float = 4.0) -> QPen:
@@ -382,13 +436,10 @@ def icon(
     name: str,
     fallback: QStyle.StandardPixmap | None = None,
 ) -> QIcon:
-    asset_name = ASSET_ICONS.get(name)
-    if asset_name:
-        asset_path = ASSET_ROOT / asset_name
-        if asset_path.is_file():
-            asset_icon = QIcon(str(asset_path))
-            if not asset_icon.isNull():
-                return asset_icon
+    if name in ASSET_ICONS:
+        candidate_asset = asset_icon(name)
+        if not candidate_asset.isNull():
+            return candidate_asset
 
         app = QApplication.instance()
         if app is not None and fallback is not None:
