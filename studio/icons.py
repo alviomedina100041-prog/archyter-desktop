@@ -246,6 +246,34 @@ def _draw_chevron(p: QPainter) -> None:
     p.drawLine(QPointF(32, 36), QPointF(43, 25))
 
 
+
+
+def _draw_kernel(p: QPainter) -> None:
+    p.setPen(_pen("#26384d", 3.0))
+    p.setBrush(QColor("#eef4fa"))
+    p.drawRoundedRect(QRectF(17, 17, 30, 30), 5, 5)
+    p.setBrush(QColor("#26384d"))
+    p.setPen(Qt.PenStyle.NoPen)
+    p.drawRoundedRect(QRectF(25, 25, 14, 14), 3, 3)
+
+    p.setPen(_pen("#26384d", 2.5))
+    for x in (21, 29, 37, 45):
+        p.drawLine(QPointF(x, 11), QPointF(x, 17))
+        p.drawLine(QPointF(x, 47), QPointF(x, 53))
+    for y in (21, 29, 37, 45):
+        p.drawLine(QPointF(11, y), QPointF(17, y))
+        p.drawLine(QPointF(47, y), QPointF(53, y))
+
+
+def _draw_expand(p: QPainter) -> None:
+    p.setPen(_pen("#40546d", 3.2))
+    p.setBrush(Qt.BrushStyle.NoBrush)
+    p.drawLine(QPointF(22, 42), QPointF(45, 19))
+    p.drawLine(QPointF(33, 19), QPointF(45, 19))
+    p.drawLine(QPointF(45, 19), QPointF(45, 31))
+    p.drawRoundedRect(QRectF(14, 26, 28, 24), 4, 4)
+
+
 def _draw_image(p: QPainter) -> None:
     p.setPen(_pen("#8855d8", 2.8))
     p.setBrush(QColor("#f0e9ff"))
@@ -295,6 +323,8 @@ _DRAWERS = {
     "git": _draw_git,
     "grid": _draw_grid,
     "variables": _draw_variables,
+    "kernel": _draw_kernel,
+    "expand": _draw_expand,
     "stop": _draw_stop,
     "more": _draw_more,
     "chevron": _draw_chevron,
