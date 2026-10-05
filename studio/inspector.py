@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
     QHeaderView,
@@ -152,6 +152,7 @@ class InspectorPanel(QFrame):
         v.addLayout(vh)
 
         self.table = QTableWidget(0, 3)
+        self.table.setMaximumHeight(250)
         self.table.setHorizontalHeaderLabels(["Nombre", "Tipo", "Valor"])
         self.table.verticalHeader().hide()
         self.table.setShowGrid(False)
@@ -171,6 +172,17 @@ class InspectorPanel(QFrame):
             QHeaderView.ResizeMode.Stretch,
         )
         v.addWidget(self.table, 1)
+
+        self._variables_animation = QPropertyAnimation(
+            self.table,
+            b"maximumHeight",
+            self,
+        )
+        self._variables_animation.setDuration(170)
+        self._variables_animation.setEasingCurve(
+            QEasingCurve.Type.OutCubic
+        )
+
         layout.addWidget(self.variables_card, 1)
 
         self.terminal = TerminalCard(working_directory)
@@ -181,7 +193,36 @@ class InspectorPanel(QFrame):
         layout.addWidget(self.terminal)
 
     def _toggle_variables(self) -> None:
-        self.table.setVisible(not self.table.isVisible())
+        self._variables_animation.stop()
+
+        if self.table.isVisible() and self.table.maximumHeight() > 0:
+            self._variables_animation.setStartValue(
+                max(1, self.table.height())
+            )
+            self._variables_animation.setEndValue(0)
+
+            def hide_after() -> None:
+                if self.table.maximumHeight() == 0:
+                    self.table.hide()
+
+            try:
+                self._variables_animation.finished.disconnect()
+            except (RuntimeError, TypeError):
+                pass
+            self._variables_animation.finished.connect(hide_after)
+            self._variables_animation.start()
+            return
+
+        try:
+            self._variables_animation.finished.disconnect()
+        except (RuntimeError, TypeError):
+            pass
+
+        self.table.show()
+        self.table.setMaximumHeight(0)
+        self._variables_animation.setStartValue(0)
+        self._variables_animation.setEndValue(250)
+        self._variables_animation.start()
 
     def update_kernel(self, name: str, state: str, detail: str) -> None:
         self.kernel_name.setText(name or "Python 3")
