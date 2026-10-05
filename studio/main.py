@@ -8,6 +8,33 @@ from pathlib import Path
 os.environ.setdefault("PYTHONUTF8", "1")
 os.environ.setdefault("QT_AUTO_SCREEN_SCALE_FACTOR", "1")
 
+# Chromium can incorrectly classify an embedded QtWebEngine surface as
+# occluded on Windows. The visible symptom is exactly what Archyter users
+# reported: Jupyter appears stuck, then immediately advances after minimizing
+# and restoring the window. Keep the renderer active while the IDE is visible.
+if os.name == "nt":
+    current_flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+    required_flags = (
+        "--disable-features=CalculateNativeWinOcclusion",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
+        "--disable-background-timer-throttling",
+    )
+    missing = [
+        flag
+        for flag in required_flags
+        if flag not in current_flags
+    ]
+    if missing:
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join(
+            part
+            for part in (
+                current_flags.strip(),
+                *missing,
+            )
+            if part
+        )
+
 from PySide6.QtCore import QSettings, QTimer
 from PySide6.QtWidgets import QApplication
 
