@@ -847,6 +847,7 @@ class StudioWindow(QMainWindow):
             if self.active_document
             else None
         )
+        source_was_dir = source.is_dir()
 
         try:
             source.rename(target)
@@ -864,7 +865,7 @@ class StudioWindow(QMainWindow):
                 self.notebook_editor.path = target
                 self.document_title.setText(target.name)
                 self.explorer.set_active_path(str(target))
-            elif source.is_dir():
+            elif source_was_dir:
                 try:
                     relative = active_before.relative_to(source)
                     moved_active = target / relative
