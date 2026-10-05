@@ -90,6 +90,7 @@ class StudioWindow(QMainWindow):
         self.explorer.project_requested.connect(self._switch_project)
         self.explorer.new_requested.connect(self._handle_new)
         self.explorer.delete_requested.connect(self._delete_file)
+        self.explorer.rename_requested.connect(self._rename_path)
         self.explorer.location_changed.connect(self._on_location_changed)
         self.explorer.add_recent(self.root_dir)
 
@@ -173,9 +174,9 @@ class StudioWindow(QMainWindow):
         self.run_button.clicked.connect(self._run_cell)
         layout.addWidget(self.run_button)
 
-        self.kernel_button = AnimatedPushButton("Kernel")
-        self.kernel_button.setIcon(icon("kernel"))
-        self.kernel_button.setToolTip("Reiniciar kernel")
+        self.kernel_button = AnimatedPushButton("Reiniciar kernel")
+        self.kernel_button.setIcon(icon("python"))
+        self.kernel_button.setToolTip("Cerrar el kernel actual y arrancar uno nuevo")
         self.kernel_button.clicked.connect(self._restart_kernel)
         layout.addWidget(self.kernel_button)
 
@@ -189,14 +190,11 @@ class StudioWindow(QMainWindow):
         project.clicked.connect(self._choose_project)
         layout.addWidget(project)
 
-        self.reload_button = AnimatedToolButton(
-            base_icon=18,
-            hover_icon=20,
-        )
-        self.reload_button.setObjectName("IconButton")
+        self.reload_button = AnimatedPushButton("Recargar todo")
+        self.reload_button.setObjectName("SecondaryButton")
         self.reload_button.setIcon(icon("refresh"))
         self.reload_button.setToolTip(
-            "Recargar notebook, proyecto y kernel"
+            "Recargar notebook, proyecto y reiniciar kernel (F5)"
         )
         self.reload_button.clicked.connect(
             self._reload_everything
@@ -791,6 +789,96 @@ class StudioWindow(QMainWindow):
                 "Nuevo archivo",
                 str(exc),
             )
+
+    def _rename_path(self, path: str) -> None:
+        source = Path(path).resolve()
+
+        try:
+            source.relative_to(
+                Path(self.root_dir).resolve()
+            )
+        except ValueError:
+            QMessageBox.warning(
+                self,
+                "Renombrar",
+                "El elemento está fuera del proyecto.",
+            )
+            return
+
+        if not source.exists():
+            self.explorer.refresh()
+            return
+
+        new_name, accepted = QInputDialog.getText(
+            self,
+            "Renombrar",
+            "Nuevo nombre:",
+            text=source.name,
+        )
+        new_name = new_name.strip()
+
+        if not accepted or not new_name or new_name == source.name:
+            return
+
+        if (
+            new_name in {".", ".."}
+            or "/" in new_name
+            or "\\" in new_name
+        ):
+            QMessageBox.warning(
+                self,
+                "Renombrar",
+                "Usa sólo un nombre, sin rutas.",
+            )
+            return
+
+        target = source.with_name(new_name)
+
+        if target.exists():
+            QMessageBox.warning(
+                self,
+                "Renombrar",
+                "Ya existe un archivo o carpeta con ese nombre.",
+            )
+            return
+
+        active_before = (
+            Path(self.active_document).resolve()
+            if self.active_document
+            else None
+        )
+
+        try:
+            source.rename(target)
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "Renombrar",
+                str(exc),
+            )
+            return
+
+        if active_before is not None:
+            if active_before == source:
+                self.active_document = str(target)
+                self.notebook_editor.path = target
+                self.document_title.setText(target.name)
+                self.explorer.set_active_path(str(target))
+            elif source.is_dir():
+                try:
+                    relative = active_before.relative_to(source)
+                    moved_active = target / relative
+                    self.active_document = str(moved_active)
+                    self.notebook_editor.path = moved_active
+                    self.document_title.setText(moved_active.name)
+                    self.explorer.set_active_path(str(moved_active))
+                except ValueError:
+                    pass
+
+        self.explorer.refresh()
+        self.save_status.setText(
+            f"Renombrado: {target.name}"
+        )
 
     def _delete_file(self, path: str) -> None:
         target = Path(path).resolve()
