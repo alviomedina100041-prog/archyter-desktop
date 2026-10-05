@@ -106,7 +106,9 @@ class ExplorerPanel(QFrame):
         self.path_label = QLabel(self._display_location(self.root_dir))
         self.path_label.setObjectName("ProjectPath")
         self.path_label.setToolTip(self.root_dir)
-        layout.addWidget(self.path_label)
+        # The approved Windows layout starts the tree directly below
+        # the project header. Keep the breadcrumb for status/tooltips only.
+        self.path_label.hide()
 
         self.model = StudioFileSystemModel(self)
         self.model.setReadOnly(True)
