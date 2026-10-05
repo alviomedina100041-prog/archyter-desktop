@@ -1,6 +1,26 @@
 use std::{env, fs, path::PathBuf, process::Command};
 
+fn assemble_windows_app(out: &PathBuf) {
+    let parts_dir = PathBuf::from("src/windows_app_parts");
+    let mut parts: Vec<PathBuf> = fs::read_dir(&parts_dir)
+        .map(|it| it.filter_map(Result::ok).map(|e| e.path()).collect())
+        .unwrap_or_default();
+    parts.sort();
+    let mut joined = String::new();
+    for part in parts {
+        println!("cargo:rerun-if-changed={}", part.display());
+        if let Ok(body) = fs::read_to_string(&part) {
+            joined.push_str(&body);
+            if !body.ends_with('\n') { joined.push('\n'); }
+        }
+    }
+    let _ = fs::write(out.join("windows_app_generated.rs"), joined);
+}
+
 fn main() {
+    let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
+    assemble_windows_app(&out);
+
     println!("cargo:rerun-if-changed=assets/blackarch.ico");
     println!("cargo:rerun-if-changed=assets/app.manifest");
 
@@ -8,7 +28,6 @@ fn main() {
         return;
     }
 
-    let out = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR"));
     let rc = out.join("blackarch_forensic_console.rc");
     let manifest = fs::canonicalize("assets/app.manifest").unwrap_or_else(|_| PathBuf::from("assets/app.manifest"));
     let icon = fs::canonicalize("assets/blackarch.ico").unwrap_or_else(|_| PathBuf::from("assets/blackarch.ico"));
