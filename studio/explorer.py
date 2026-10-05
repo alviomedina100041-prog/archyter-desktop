@@ -4,8 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QDir, QModelIndex, QSettings, Qt, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtCore import QDir, QModelIndex, QSettings, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QFileSystemModel,
     QFrame,
@@ -15,11 +14,11 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMenu,
     QStyle,
-    QToolButton,
     QTreeView,
     QVBoxLayout,
 )
 
+from .animated import AnimatedToolButton
 from .icons import icon
 
 
@@ -29,10 +28,20 @@ class StudioFileSystemModel(QFileSystemModel):
             path = Path(self.filePath(index))
             if self.isDir(index):
                 return icon("folder", QStyle.StandardPixmap.SP_DirIcon)
-            if path.suffix.lower() == ".ipynb":
+
+            suffix = path.suffix.lower()
+            if suffix == ".ipynb":
                 return icon("notebook", QStyle.StandardPixmap.SP_FileIcon)
-            if path.suffix.lower() == ".py":
+            if suffix == ".py":
                 return icon("python", QStyle.StandardPixmap.SP_FileIcon)
+            if suffix == ".csv":
+                return icon("csv", QStyle.StandardPixmap.SP_FileIcon)
+            if suffix in {".png", ".jpg", ".jpeg", ".webp", ".svg"}:
+                return icon("image", QStyle.StandardPixmap.SP_FileIcon)
+            if suffix in {".md", ".markdown"}:
+                return icon("markdown", QStyle.StandardPixmap.SP_FileIcon)
+            return icon("file", QStyle.StandardPixmap.SP_FileIcon)
+
         return super().data(index, role)
 
 
@@ -52,33 +61,41 @@ class ExplorerPanel(QFrame):
         self.settings = QSettings("EduardoMedinaLabs", "ArchyterStudio")
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(9, 9, 9, 9)
+        layout.setContentsMargins(10, 10, 10, 10)
         layout.setSpacing(7)
 
         header = QHBoxLayout()
+        header.setSpacing(5)
+
         title = QLabel("PROYECTO")
         title.setObjectName("SectionTitle")
         header.addWidget(title)
         header.addStretch(1)
 
-        self.new_button = QToolButton()
+        self.new_button = AnimatedToolButton(base_icon=18, hover_icon=20)
         self.new_button.setObjectName("IconButton")
         self.new_button.setIcon(icon("add"))
+        self.new_button.setIconSize(QSize(18, 18))
         self.new_button.setToolTip("Crear en la carpeta seleccionada")
-        self.new_button.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.new_button.setPopupMode(
+            self.new_button.ToolButtonPopupMode.InstantPopup
+        )
+
         menu = QMenu(self.new_button)
         notebook = menu.addAction(icon("notebook"), "Notebook")
         folder = menu.addAction(icon("folder"), "Carpeta")
-        text_file = menu.addAction("Archivo de texto")
+        text_file = menu.addAction(icon("file"), "Archivo de texto")
         notebook.triggered.connect(lambda: self.new_requested.emit("notebook"))
         folder.triggered.connect(lambda: self.new_requested.emit("folder"))
         text_file.triggered.connect(lambda: self.new_requested.emit("file"))
         self.new_button.setMenu(menu)
 
-        self.delete_button = QToolButton()
+        self.delete_button = AnimatedToolButton(base_icon=17, hover_icon=19)
         self.delete_button.setObjectName("DeleteButton")
         self.delete_button.setIcon(icon("trash"))
-        self.delete_button.setToolTip("Enviar archivo seleccionado a la papelera")
+        self.delete_button.setToolTip(
+            "Enviar archivo seleccionado a la Papelera de reciclaje"
+        )
         self.delete_button.setEnabled(False)
         self.delete_button.clicked.connect(self._delete_selected)
 
@@ -101,20 +118,26 @@ class ExplorerPanel(QFrame):
         self.model.setRootPath(self.root_dir)
 
         self.tree = QTreeView()
+        self.tree.setObjectName("ProjectTree")
         self.tree.setModel(self.model)
         self.tree.setRootIndex(self.model.index(self.root_dir))
         self.tree.setHeaderHidden(True)
         self.tree.setAnimated(True)
         self.tree.setIndentation(16)
+        self.tree.setIconSize(QSize(18, 18))
         self.tree.setUniformRowHeights(True)
         self.tree.setEditTriggers(QTreeView.EditTrigger.NoEditTriggers)
+        self.tree.setExpandsOnDoubleClick(True)
+        self.tree.setAllColumnsShowFocus(False)
         self.tree.clicked.connect(self._clicked)
         self.tree.doubleClicked.connect(self._double_clicked)
         self.tree.selectionModel().selectionChanged.connect(
             lambda *_args: self._update_delete_state()
         )
+
         for column in range(1, 4):
             self.tree.hideColumn(column)
+
         layout.addWidget(self.tree, 1)
 
         recent_title = QLabel("PROYECTOS RECIENTES")
@@ -122,7 +145,9 @@ class ExplorerPanel(QFrame):
         layout.addWidget(recent_title)
 
         self.recents = QListWidget()
-        self.recents.setMaximumHeight(150)
+        self.recents.setObjectName("RecentProjects")
+        self.recents.setIconSize(QSize(19, 19))
+        self.recents.setMaximumHeight(160)
         self.recents.itemActivated.connect(self._open_recent)
         self.recents.itemClicked.connect(self._open_recent)
         layout.addWidget(self.recents)
@@ -130,8 +155,11 @@ class ExplorerPanel(QFrame):
 
     def _display_location(self, path: str) -> str:
         path_obj = Path(path)
+
         try:
-            relative = path_obj.resolve().relative_to(Path(self.root_dir).resolve())
+            relative = path_obj.resolve().relative_to(
+                Path(self.root_dir).resolve()
+            )
             if str(relative) == ".":
                 return Path(self.root_dir).name or self.root_dir
             return f"{Path(self.root_dir).name} / {relative.as_posix()}"
@@ -174,16 +202,22 @@ class ExplorerPanel(QFrame):
     def set_active_path(self, path: str) -> None:
         resolved = os.path.abspath(path)
         self._active_path = resolved
+
         index = self.model.index(resolved)
         if index.isValid():
             self.tree.setCurrentIndex(index)
             self.tree.scrollTo(index, QTreeView.ScrollHint.PositionAtCenter)
+
             parent = index.parent()
             while parent.isValid():
                 self.tree.expand(parent)
                 parent = parent.parent()
+
         self._current_directory = os.path.dirname(resolved)
-        self.path_label.setText(self._display_location(self._current_directory))
+        self.path_label.setText(
+            self._display_location(self._current_directory)
+        )
+        self.path_label.setToolTip(self._current_directory)
         self._update_delete_state()
 
     def refresh(self) -> None:
@@ -191,6 +225,7 @@ class ExplorerPanel(QFrame):
         self.model.setRootPath("")
         self.model.setRootPath(root)
         self.tree.setRootIndex(self.model.index(root))
+
         if self._active_path and os.path.exists(self._active_path):
             self.set_active_path(self._active_path)
         else:
@@ -201,9 +236,11 @@ class ExplorerPanel(QFrame):
         self.root_dir = os.path.abspath(root_dir)
         self._current_directory = self.root_dir
         self._active_path = None
+
         self.model.setRootPath(self.root_dir)
         self.tree.setRootIndex(self.model.index(self.root_dir))
         self.tree.collapseAll()
+
         self.path_label.setText(self._display_location(self.root_dir))
         self.path_label.setToolTip(self.root_dir)
         self.delete_button.setEnabled(False)
@@ -212,19 +249,28 @@ class ExplorerPanel(QFrame):
     def add_recent(self, path: str) -> None:
         resolved = str(Path(path).resolve())
         raw = self.settings.value("recent_projects", "[]")
+
         try:
             values = json.loads(str(raw))
         except json.JSONDecodeError:
             values = []
-        values = [item for item in values if item != resolved and Path(item).is_dir()]
+
+        values = [
+            item
+            for item in values
+            if item != resolved and Path(item).is_dir()
+        ]
         values.insert(0, resolved)
-        values = values[:6]
-        self.settings.setValue("recent_projects", json.dumps(values))
+        self.settings.setValue(
+            "recent_projects",
+            json.dumps(values[:6]),
+        )
         self.reload_recents()
 
     def reload_recents(self) -> None:
         self.recents.clear()
         raw = self.settings.value("recent_projects", "[]")
+
         try:
             values = json.loads(str(raw))
         except json.JSONDecodeError:
@@ -234,12 +280,21 @@ class ExplorerPanel(QFrame):
             path = Path(value)
             if not path.is_dir():
                 continue
-            item = QListWidgetItem(icon("folder"), path.name or str(path))
+
+            item = QListWidgetItem(
+                icon("folder"),
+                f"{path.name or path}\n{path}",
+            )
             item.setData(Qt.ItemDataRole.UserRole, str(path))
             item.setToolTip(str(path))
+            item.setSizeHint(QSize(0, 48))
             self.recents.addItem(item)
 
     def _open_recent(self, item: QListWidgetItem) -> None:
         path = item.data(Qt.ItemDataRole.UserRole)
-        if path and Path(path).is_dir() and os.path.abspath(path) != self.root_dir:
+        if (
+            path
+            and Path(path).is_dir()
+            and os.path.abspath(path) != self.root_dir
+        ):
             self.project_requested.emit(str(path))
