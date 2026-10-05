@@ -240,6 +240,30 @@ def _draw_stop(p: QPainter) -> None:
     p.drawRoundedRect(QRectF(18, 18, 28, 28), 4, 4)
 
 
+def _draw_edit(p: QPainter) -> None:
+    p.setPen(_pen("#3d6f9f", 3.3))
+    p.setBrush(QColor("#eaf4ff"))
+    p.drawRoundedRect(QRectF(12, 42, 31, 9), 3, 3)
+    p.setBrush(QColor("#3d6f9f"))
+    path = QPainterPath()
+    path.moveTo(17, 39)
+    path.lineTo(39, 17)
+    path.lineTo(48, 26)
+    path.lineTo(26, 48)
+    path.lineTo(15, 50)
+    path.closeSubpath()
+    p.drawPath(path)
+    p.setBrush(QColor("#ffffff"))
+    p.drawPolygon(
+        QPolygonF([
+            QPointF(39, 17),
+            QPointF(44, 12),
+            QPointF(53, 21),
+            QPointF(48, 26),
+        ])
+    )
+
+
 def _draw_more(p: QPainter) -> None:
     p.setPen(Qt.PenStyle.NoPen)
     p.setBrush(QColor("#3b4b61"))
@@ -334,6 +358,7 @@ _DRAWERS = {
     "expand": _draw_expand,
     "stop": _draw_stop,
     "more": _draw_more,
+    "edit": _draw_edit,
     "chevron": _draw_chevron,
     "image": _draw_image,
     "csv": _draw_csv,
@@ -364,6 +389,11 @@ def icon(
             asset_icon = QIcon(str(asset_path))
             if not asset_icon.isNull():
                 return asset_icon
+
+        app = QApplication.instance()
+        if app is not None and fallback is not None:
+            return app.style().standardIcon(fallback)
+        return QIcon()
 
     candidate = _painted_icon(name)
     if not candidate.isNull():
