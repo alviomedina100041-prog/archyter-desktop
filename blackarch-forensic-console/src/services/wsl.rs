@@ -23,31 +23,19 @@ impl CommandResult {
 
 /// Run a shell command inside the configured WSL distribution.
 ///
-/// This function intentionally accepts a shell command because it backs the app's explicit
-/// interactive terminal. Do not pass untrusted data into this function from automated workflows.
+/// This accepts shell syntax because it backs the explicit interactive terminal.
+/// Automated workflows should call dedicated services instead of interpolating untrusted data.
 pub fn run_shell(distro: &str, shell_command: &str) -> std::io::Result<CommandResult> {
     let start = Instant::now();
     #[cfg(target_os = "windows")]
     let output = Command::new("wsl.exe")
-        .arg("-d")
-        .arg(distro)
-        .arg("--")
-        .arg("bash")
-        .arg("-lc")
-        .arg(shell_command)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
+        .arg("-d").arg(distro).arg("--").arg("bash").arg("-lc").arg(shell_command)
+        .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).output()?;
 
     #[cfg(not(target_os = "windows"))]
     let output = Command::new("bash")
-        .arg("-lc")
-        .arg(shell_command)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
+        .arg("-lc").arg(shell_command)
+        .stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).output()?;
 
     Ok(CommandResult {
         success: output.status.success(),
@@ -61,21 +49,14 @@ pub fn run_shell(distro: &str, shell_command: &str) -> std::io::Result<CommandRe
 pub fn probe_blackarch(distro: &str) -> std::io::Result<CommandResult> {
     run_shell(
         distro,
-        "printf 'OS='; . /etc/os-release 2>/dev/null; printf '%s\\n' \"\${PRETTY_NAME:-Linux}\"; \
-         printf 'KERNEL='; uname -r; \
-         printf 'USER='; id -un; \
-         printf 'TOOLS='; pacman -Qg blackarch-forensic 2>/dev/null | wc -l",
+        r#"printf 'OS='; . /etc/os-release 2>/dev/null; printf '%s\n' "${PRETTY_NAME:-Linux}"; printf 'KERNEL='; uname -r; printf 'USER='; id -un; printf 'TOOLS='; pacman -Qg blackarch-forensic 2>/dev/null | wc -l"#,
     )
 }
 
 pub fn open_interactive_terminal(distro: &str) -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
     {
-        Command::new("wt.exe")
-            .arg("wsl.exe")
-            .arg("-d")
-            .arg(distro)
-            .spawn()?;
+        Command::new("wt.exe").arg("wsl.exe").arg("-d").arg(distro).spawn()?;
         Ok(())
     }
     #[cfg(not(target_os = "windows"))]
