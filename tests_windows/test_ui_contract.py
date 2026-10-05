@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QToolButton
 
@@ -67,6 +68,64 @@ class UiContractTests(unittest.TestCase):
 
         self.assertGreater(visible_pixel_count(app_icon()), 18)
 
+
+
+    def test_open_file_does_not_wait_for_session_api(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            notebook = root / "instant.ipynb"
+            notebook.write_text(
+                '{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}',
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(
+                    StudioWindow,
+                    "_start_jupyter",
+                    lambda self: None,
+                ),
+                patch.object(
+                    StudioWindow,
+                    "_start_timers",
+                    lambda self: None,
+                ),
+            ):
+                window = StudioWindow(str(root))
+
+            try:
+                window.manager.port = 8765
+
+                def forbidden_session_call(*_args, **_kwargs):
+                    time.sleep(0.5)
+                    raise AssertionError(
+                        "opening a file must not wait for ensure_notebook_session"
+                    )
+
+                window.manager.ensure_notebook_session = forbidden_session_call
+                window.manager.open_url = lambda _path: "about:blank"
+
+                started = time.perf_counter()
+                window._open_file(str(notebook))
+                elapsed = time.perf_counter() - started
+
+                self.assertLess(
+                    elapsed,
+                    0.12,
+                    "Notebook navigation is still blocking before the editor opens",
+                )
+                self.assertEqual(
+                    window.active_document,
+                    str(notebook.resolve()),
+                )
+                self.assertEqual(
+                    window.browser.focusPolicy(),
+                    Qt.FocusPolicy.StrongFocus,
+                )
+            finally:
+                window._closing = True
+                window.inspector.terminal.shutdown()
+                window.close()
 
     def test_session_poll_does_not_block_the_ui_thread(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
