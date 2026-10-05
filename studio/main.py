@@ -15,6 +15,20 @@ from .icons import app_icon
 from .window import StudioWindow
 
 
+def _set_windows_app_identity() -> None:
+    if os.name != "nt":
+        return
+
+    try:
+        import ctypes
+
+        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+            "EduardoMedinaLabs.ArchyterStudio"
+        )
+    except Exception:
+        pass
+
+
 def resolve_project() -> str:
     if len(sys.argv) > 1:
         candidate = Path(sys.argv[1]).expanduser()
@@ -32,6 +46,7 @@ def resolve_project() -> str:
 
 
 def main() -> int:
+    _set_windows_app_identity()
     app = QApplication(sys.argv)
     app.setApplicationName("Archyter Studio")
     app.setOrganizationName("EduardoMedinaLabs")
