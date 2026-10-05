@@ -1,0 +1,18 @@
+[package]
+name = "blackarch-forensic-desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+forensic-core = { path = "../../../crates/forensic-core" }
+portable-pty = "0.9"
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+
+[features]
+default = []
