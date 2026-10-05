@@ -1,0 +1,170 @@
+
+use std::collections::VecDeque;
+use std::env;
+use std::ffi::c_void;
+use std::mem::{size_of, zeroed};
+use std::path::{Path, PathBuf};
+use std::ptr::{null, null_mut};
+use std::thread;
+
+use blackarch_forensic_console::model::{human_bytes, CaseData, Evidence, Finding, Severity, TimelineEvent};
+use blackarch_forensic_console::services::{hashing, postgres, project_scan, report, wsl};
+
+// -------------------------------------------------------------------------------------------------
+// Minimal Win32/GDI bindings. Keeping the executable dependency-free gives fast startup, a small
+// binary, predictable Windows 11 behavior, and no bundled browser/runtime.
+// -------------------------------------------------------------------------------------------------
+
+type BOOL = i32;
+type BYTE = u8;
+type WORD = u16;
+type DWORD = u32;
+type UINT = u32;
+type LONG = i32;
+type LONG_PTR = isize;
+type ULONG_PTR = usize;
+type WPARAM = usize;
+type LPARAM = isize;
+type LRESULT = isize;
+type COLORREF = u32;
+type HANDLE = *mut c_void;
+type HINSTANCE = HANDLE;
+type HWND = HANDLE;
+type HDC = HANDLE;
+type HGDIOBJ = HANDLE;
+type HBRUSH = HANDLE;
+type HPEN = HANDLE;
+type HFONT = HANDLE;
+type HBITMAP = HANDLE;
+type HICON = HANDLE;
+type HCURSOR = HANDLE;
+type HMENU = HANDLE;
+type HDROP = HANDLE;
+
+type WNDPROC = Option<unsafe extern "system" fn(HWND, UINT, WPARAM, LPARAM) -> LRESULT>;
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct POINT { x: LONG, y: LONG }
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct RECT { left: LONG, top: LONG, right: LONG, bottom: LONG }
+
+#[repr(C)]
+struct PAINTSTRUCT {
+    hdc: HDC,
+    fErase: BOOL,
+    rcPaint: RECT,
+    fRestore: BOOL,
+    fIncUpdate: BOOL,
+    rgbReserved: [BYTE; 32],
+}
+
+#[repr(C)]
+struct MSG {
+    hwnd: HWND,
+    message: UINT,
+    wParam: WPARAM,
+    lParam: LPARAM,
+    time: DWORD,
+    pt: POINT,
+    lPrivate: DWORD,
+}
+
+#[repr(C)]
+struct WNDCLASSW {
+    style: UINT,
+    lpfnWndProc: WNDPROC,
+    cbClsExtra: i32,
+    cbWndExtra: i32,
+    hInstance: HINSTANCE,
+    hIcon: HICON,
+    hCursor: HCURSOR,
+    hbrBackground: HBRUSH,
+    lpszMenuName: *const u16,
+    lpszClassName: *const u16,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+struct FILETIME { dwLowDateTime: DWORD, dwHighDateTime: DWORD }
+
+#[repr(C)]
+struct MEMORYSTATUSEX {
+    dwLength: DWORD,
+    dwMemoryLoad: DWORD,
+    ullTotalPhys: u64,
+    ullAvailPhys: u64,
+    ullTotalPageFile: u64,
+    ullAvailPageFile: u64,
+    ullTotalVirtual: u64,
+    ullAvailVirtual: u64,
+    ullAvailExtendedVirtual: u64,
+}
+
+#[link(name = "user32")]
+extern "system" {
+    fn RegisterClassW(lpWndClass: *const WNDCLASSW) -> WORD;
+    fn CreateWindowExW(dwExStyle: DWORD, lpClassName: *const u16, lpWindowName: *const u16,
+        dwStyle: DWORD, X: i32, Y: i32, nWidth: i32, nHeight: i32,
+        hWndParent: HWND, hMenu: HMENU, hInstance: HINSTANCE, lpParam: *mut c_void) -> HWND;
+    fn DefWindowProcW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) -> LRESULT;
+    fn ShowWindow(hWnd: HWND, nCmdShow: i32) -> BOOL;
+    fn UpdateWindow(hWnd: HWND) -> BOOL;
+    fn GetMessageW(lpMsg: *mut MSG, hWnd: HWND, wMsgFilterMin: UINT, wMsgFilterMax: UINT) -> BOOL;
+    fn TranslateMessage(lpMsg: *const MSG) -> BOOL;
+    fn DispatchMessageW(lpMsg: *const MSG) -> LRESULT;
+    fn PostQuitMessage(nExitCode: i32);
+    fn BeginPaint(hWnd: HWND, lpPaint: *mut PAINTSTRUCT) -> HDC;
+    fn EndPaint(hWnd: HWND, lpPaint: *const PAINTSTRUCT) -> BOOL;
+    fn GetClientRect(hWnd: HWND, lpRect: *mut RECT) -> BOOL;
+    fn InvalidateRect(hWnd: HWND, lpRect: *const RECT, bErase: BOOL) -> BOOL;
+    fn PostMessageW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) -> BOOL;
+    fn SendMessageW(hWnd: HWND, Msg: UINT, wParam: WPARAM, lParam: LPARAM) -> LRESULT;
+    fn LoadCursorW(hInstance: HINSTANCE, lpCursorName: *const u16) -> HCURSOR;
+    fn LoadImageW(hInst: HINSTANCE, name: *const u16, uType: UINT, cx: i32, cy: i32, fuLoad: UINT) -> HANDLE;
+    fn DrawIconEx(hdc: HDC, xLeft: i32, yTop: i32, hIcon: HICON, cxWidth: i32, cyWidth: i32,
+        istepIfAniCur: UINT, hbrFlickerFreeDraw: HBRUSH, diFlags: UINT) -> BOOL;
+    fn SetTimer(hWnd: HWND, nIDEvent: usize, uElapse: UINT, lpTimerFunc: *mut c_void) -> usize;
+    fn KillTimer(hWnd: HWND, uIDEvent: usize) -> BOOL;
+    fn GetKeyState(nVirtKey: i32) -> i16;
+    fn OpenClipboard(hWndNewOwner: HWND) -> BOOL;
+    fn CloseClipboard() -> BOOL;
+    fn GetClipboardData(uFormat: UINT) -> HANDLE;
+    fn IsClipboardFormatAvailable(format: UINT) -> BOOL;
+    fn MessageBoxW(hWnd: HWND, lpText: *const u16, lpCaption: *const u16, uType: UINT) -> i32;
+    fn FillRect(hDC: HDC, lprc: *const RECT, hbr: HBRUSH) -> i32;
+    fn DrawTextW(hdc: HDC, lpchText: *const u16, cchText: i32, lprc: *mut RECT, format: UINT) -> i32;
+    fn SetProcessDpiAwarenessContext(value: HANDLE) -> BOOL;
+}
+
+#[link(name = "gdi32")]
+extern "system" {
+    fn CreateCompatibleDC(hdc: HDC) -> HDC;
+    fn DeleteDC(hdc: HDC) -> BOOL;
+    fn CreateCompatibleBitmap(hdc: HDC, cx: i32, cy: i32) -> HBITMAP;
+    fn SelectObject(hdc: HDC, h: HGDIOBJ) -> HGDIOBJ;
+    fn DeleteObject(ho: HGDIOBJ) -> BOOL;
+    fn BitBlt(hdc: HDC, x: i32, y: i32, cx: i32, cy: i32, hdcSrc: HDC, x1: i32, y1: i32, rop: DWORD) -> BOOL;
+    fn CreateSolidBrush(color: COLORREF) -> HBRUSH;
+    fn CreatePen(style: i32, width: i32, color: COLORREF) -> HPEN;
+    fn Rectangle(hdc: HDC, left: i32, top: i32, right: i32, bottom: i32) -> BOOL;
+    fn RoundRect(hdc: HDC, left: i32, top: i32, right: i32, bottom: i32, width: i32, height: i32) -> BOOL;
+    fn MoveToEx(hdc: HDC, x: i32, y: i32, lppt: *mut POINT) -> BOOL;
+    fn LineTo(hdc: HDC, x: i32, y: i32) -> BOOL;
+    fn Ellipse(hdc: HDC, left: i32, top: i32, right: i32, bottom: i32) -> BOOL;
+    fn SetTextColor(hdc: HDC, color: COLORREF) -> COLORREF;
+    fn SetBkMode(hdc: HDC, mode: i32) -> i32;
+    fn CreateFontW(cHeight: i32, cWidth: i32, cEscapement: i32, cOrientation: i32, cWeight: i32,
+        bItalic: DWORD, bUnderline: DWORD, bStrikeOut: DWORD, iCharSet: DWORD, iOutPrecision: DWORD,
+        iClipPrecision: DWORD, iQuality: DWORD, iPitchAndFamily: DWORD, pszFaceName: *const u16) -> HFONT;
+    fn SetDCBrushColor(hdc: HDC, color: COLORREF) -> COLORREF;
+    fn SetDCPenColor(hdc: HDC, color: COLORREF) -> COLORREF;
+    fn GetStockObject(i: i32) -> HGDIOBJ;
+}
+
+#[link(name = "kernel32")]
+extern "system" {
+    fn GetModuleHandleW(lpModuleName: *const u16) -> HINSTANCE;
+    fn GlobalLock(hMem: HANDLE) -> *mut c_void;
