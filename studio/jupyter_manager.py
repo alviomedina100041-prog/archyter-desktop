@@ -163,11 +163,94 @@ class JupyterManager(QObject):
         endpoint = "/api/contents"
         if rel:
             endpoint += f"/{quote(rel)}"
-        response = self.api_post(endpoint, {"type": "notebook", "ext": ".ipynb"})
+
+        response = self.api_post(
+            endpoint,
+            {
+                "type": "notebook",
+                "ext": ".ipynb",
+            },
+        )
         response.raise_for_status()
-        created = Path(self.root_dir, response.json()["path"]).resolve()
+
+        created = Path(
+            self.root_dir,
+            response.json()["path"],
+        ).resolve()
         self._relative(created)
         return str(created)
+
+    def kernel_specs(self) -> dict[str, Any]:
+        response = self.api_get("/api/kernelspecs")
+        response.raise_for_status()
+        return response.json()
+
+    def preferred_kernel_name(self, notebook_path: str | None = None) -> str:
+        if notebook_path:
+            try:
+                payload = json.loads(
+                    Path(notebook_path).read_text(
+                        encoding="utf-8",
+                        errors="ignore",
+                    )
+                )
+                kernelspec = (
+                    payload.get("metadata", {})
+                    .get("kernelspec", {})
+                )
+                requested = str(kernelspec.get("name") or "").strip()
+                if requested:
+                    return requested
+            except Exception:
+                pass
+
+        try:
+            specs = self.kernel_specs()
+            default = str(specs.get("default") or "").strip()
+            if default:
+                return default
+
+            kernelspecs = specs.get("kernelspecs") or {}
+            if "python3" in kernelspecs:
+                return "python3"
+
+            if kernelspecs:
+                return str(next(iter(kernelspecs)))
+        except Exception:
+            pass
+
+        return "python3"
+
+    def ensure_notebook_session(
+        self,
+        path: str,
+        kernel_name: str | None = None,
+    ) -> dict[str, Any]:
+        relative = self._relative(path)
+
+        for session in self.sessions():
+            if session.get("path") == relative:
+                return session
+
+        chosen_kernel = (
+            kernel_name
+            or self.preferred_kernel_name(path)
+        )
+
+        response = self.api_post(
+            "/api/sessions",
+            {
+                "name": Path(relative).name,
+                "path": relative,
+                "type": "notebook",
+                "kernel": {
+                    "name": chosen_kernel,
+                },
+            },
+            timeout=15,
+        )
+        response.raise_for_status()
+        return response.json()
 
     def sessions(self) -> list[dict[str, Any]]:
         response = self.api_get("/api/sessions")
@@ -345,13 +428,30 @@ print("__ARCHYTER_STUDIO_VARS__" + json.dumps(_items))
       min-width:0 !important; min-height:0 !important;
       background:#fff !important;
     }
-    .jp-MainAreaWidget, .jp-NotebookPanel, .jp-NotebookPanel-notebook,
-    .jp-Notebook { width:100% !important; max-width:none !important; min-width:0 !important; }
-    .jp-Notebook { padding:10px 16px 80px 16px !important; }
+    .jp-MainAreaWidget,
+    .jp-NotebookPanel,
+    .jp-NotebookPanel-notebook,
+    .jp-WindowedPanel,
+    .jp-WindowedPanel-outer,
+    .jp-WindowedPanel-inner,
+    .jp-Notebook {
+      width:100% !important;
+      max-width:none !important;
+      min-width:0 !important;
+      background:#fff !important;
+    }
+    .jp-Notebook {
+      padding:12px 18px 80px 18px !important;
+    }
     .jp-NotebookPanel-toolbar {
-      min-height:35px !important; height:35px !important;
-      background:#fff !important; border-bottom:1px solid #e3eaf1 !important;
-      padding:0 6px !important;
+      min-height:38px !important;
+      height:38px !important;
+      background:#fff !important;
+      border:1px solid #e3eaf1 !important;
+      border-radius:8px !important;
+      margin:0 0 8px 0 !important;
+      padding:0 8px !important;
+      box-shadow:0 1px 3px rgba(31,74,110,.04) !important;
     }
     .lm-TabBar,
     .lm-TabBar-content {
@@ -363,15 +463,22 @@ print("__ARCHYTER_STUDIO_VARS__" + json.dumps(_items))
       background:#fff !important;
       border:1px solid #dce5ed !important;
       border-left:3px solid transparent !important;
-      border-radius:9px !important;
-      margin:7px 0 !important;
-      box-shadow:0 1px 3px rgba(15,23,42,.04) !important;
-      transition:border-color 120ms ease, box-shadow 120ms ease !important;
+      border-radius:10px !important;
+      margin:9px 0 !important;
+      box-shadow:0 1px 4px rgba(15,23,42,.035) !important;
+      transition:
+        border-color 120ms ease,
+        box-shadow 120ms ease,
+        transform 120ms ease !important;
     }
-    .jp-Notebook-cell:hover { border-color:#bfd2e4 !important; }
+    .jp-Notebook-cell:hover {
+      border-color:#bfd2e4 !important;
+      box-shadow:0 3px 12px rgba(15,23,42,.055) !important;
+    }
     .jp-Notebook-cell.jp-mod-active {
       border-color:#8ac9f2 !important; border-left-color:#129fe2 !important;
       box-shadow:0 0 0 1px #c7e7fb !important;
+      transform:translateY(-1px) !important;
     }
     .jp-InputArea-editor, .cm-editor, .cm-scroller, .cm-gutters,
     .jp-OutputArea-output { background:#fff !important; }
