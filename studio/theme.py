@@ -582,4 +582,42 @@ QPlainTextEdit#CellOutput {
     margin: 0;
 }
 
+
+QFrame#ExecutionBanner {
+    background: #eef8ff;
+    border: 1px solid #b9def7;
+    border-radius: 8px;
+}
+
+QLabel#ExecutionLabel {
+    color: #126aa8;
+    font-weight: 700;
+    font-size: 10px;
+}
+
+QProgressBar#ExecutionProgress {
+    background: #dcecf8;
+    border: none;
+    border-radius: 4px;
+}
+
+QProgressBar#ExecutionProgress::chunk {
+    background: #149fe2;
+    border-radius: 4px;
+}
+
+QPushButton#InterruptButton {
+    background: #ffffff;
+    color: #a63d46;
+    border: 1px solid #efc9cd;
+    border-radius: 7px;
+    padding: 4px 8px;
+    min-height: 20px;
+}
+
+QPushButton#InterruptButton:hover {
+    background: #fff1f2;
+    border-color: #e8aab0;
+}
+
 """
