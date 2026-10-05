@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import json
 import uuid
 from pathlib import Path
@@ -21,6 +22,18 @@ from PySide6.QtWidgets import (
 )
 
 from .icons import icon
+
+
+MAX_CELL_OUTPUT_CHARS = 120_000
+
+
+def _bounded_output(text: str) -> str:
+    if len(text) <= MAX_CELL_OUTPUT_CHARS:
+        return text
+    return (
+        text[:MAX_CELL_OUTPUT_CHARS]
+        + "\n[Salida truncada para proteger la memoria]"
+    )
 
 
 class AutoHeightPlainTextEdit(QPlainTextEdit):
@@ -279,7 +292,10 @@ class NotebookCell(QFrame):
                     )
                 )
 
-        rendered = "".join(chunks).strip()
+        rendered = _bounded_output(
+            "".join(chunks).strip()
+        )
+        self.outputs = []
 
         if rendered:
             self.output.setPlainText(rendered)
@@ -333,7 +349,9 @@ class NotebookCell(QFrame):
             "error",
             failed,
         )
-        self.output.setPlainText(text)
+        self.output.setPlainText(
+            _bounded_output(text)
+        )
         self.output.setVisible(bool(text))
         self.output.update_height()
         self.output.style().unpolish(
@@ -341,6 +359,11 @@ class NotebookCell(QFrame):
         )
         self.output.style().polish(
             self.output
+        )
+
+    def set_busy(self, busy: bool) -> None:
+        self.run_button.setEnabled(
+            not busy
         )
 
     def clear_output(self) -> None:
@@ -439,6 +462,19 @@ class NativeNotebookEditor(QFrame):
             self.add_markdown_button
         )
 
+        self.clear_outputs_button = QPushButton(
+            "Limpiar salidas"
+        )
+        self.clear_outputs_button.setObjectName(
+            "NotebookToolButton"
+        )
+        self.clear_outputs_button.clicked.connect(
+            self.clear_outputs
+        )
+        row.addWidget(
+            self.clear_outputs_button
+        )
+
         self.delete_cell_button = QPushButton(
             "Eliminar celda"
         )
@@ -525,6 +561,10 @@ class NativeNotebookEditor(QFrame):
         self.cells.clear()
         self.active_cell_id = None
         self.path = None
+        QTimer.singleShot(
+            0,
+            gc.collect,
+        )
 
     def load_file(self, path: str) -> None:
         target = Path(path).resolve()
@@ -736,6 +776,10 @@ class NativeNotebookEditor(QFrame):
         self.cells_layout.removeWidget(cell)
         cell.setParent(None)
         cell.deleteLater()
+        QTimer.singleShot(
+            0,
+            gc.collect,
+        )
 
         if not self.cells:
             replacement = self._append_cell(
@@ -789,6 +833,30 @@ class NativeNotebookEditor(QFrame):
             self.cells[0]
             if self.cells
             else None
+        )
+
+    def set_execution_busy(
+        self,
+        busy: bool,
+    ) -> None:
+        for cell in self.cells:
+            cell.set_busy(busy)
+
+        self.add_code_button.setEnabled(
+            not busy
+        )
+        self.add_markdown_button.setEnabled(
+            not busy
+        )
+
+    def clear_outputs(self) -> None:
+        for cell in self.cells:
+            cell.clear_output()
+
+        self._set_dirty(True)
+        QTimer.singleShot(
+            0,
+            gc.collect,
         )
 
     def execute_active(self) -> None:
