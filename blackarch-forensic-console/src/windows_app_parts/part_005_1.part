@@ -1,0 +1,55 @@
+        if state.active_tab==i{fill(dc,tr,rgb(5,34,31)); stroke(dc,tr,state.theme.green,1,5);} else {stroke(dc,tr,state.theme.border_soft,1,5);}
+        text(dc,&state.ui,label,tr,if state.active_tab==i{state.theme.text}else{state.theme.muted},FontKind::Small,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+    }
+    text(dc,&state.ui,"+",R{x:r.x+8+4*116,y:r.y+5,w:34,h:34},state.theme.muted,FontKind::Normal,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+    line(dc,r.x,r.y+43,r.right(),r.y+43,state.theme.border_soft,1);
+    let body=R{x:r.x+10,y:r.y+50,w:r.w-20,h:r.h-61};
+    match state.active_tab {
+        0 => draw_terminal_lines(dc,state,body),
+        1 => draw_tool_tab(dc,state,body,"Python / DFIR", &["Run scripts inside Arch/BlackArch WSL2.","Example:","  python -m volatility3 -h", "", "Type a command below and press Enter."]),
+        2 => draw_postgres_tab(dc,state,body),
+        _ => draw_tool_tab(dc,state,body,"BlackArch Tool Workspace", &["Forensic group installed through pacman.","Quick commands:","  pacman -Qg blackarch-forensic | wc -l", "  pacman -Qg blackarch-forensic", "", "Drag a project folder into this window to run the bounded source audit."]),
+    }
+}
+
+unsafe fn draw_terminal_lines(dc:HDC,state:&AppState,body:R){
+    let line_h=17; let max=((body.h-32)/line_h).max(1) as usize; let start=state.terminal_lines.len().saturating_sub(max);
+    let mut y=body.y;
+    for line_s in state.terminal_lines.iter().skip(start){
+        let color=if line_s.contains("$ ")||line_s.starts_with("erp=#"){state.theme.cyan}else if line_s.contains("error")||line_s.contains("failed"){state.theme.red}else if line_s.contains("SHA256")||line_s.contains("verified"){state.theme.green}else{rgb(207,220,226)};
+        text(dc,&state.ui,line_s,R{x:body.x,y,w:body.w,h:line_h},color,FontKind::MonoSmall,DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS); y+=line_h;
+    }
+    let input=R{x:body.x,y:body.bottom()-26,w:body.w,h:24}; fill(dc,input,rgb(4,14,18)); stroke(dc,input,if state.terminal_focus{state.theme.green}else{state.theme.border},1,4);
+    text(dc,&state.ui,&format!("blackarch@wsl2 ~ $ {}_",state.command_input),R{x:input.x+7,y:input.y,w:input.w-12,h:input.h},state.theme.green,FontKind::MonoSmall,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+}
+
+unsafe fn draw_tool_tab(dc:HDC,state:&AppState,body:R,title:&str,lines:&[&str]){
+    text(dc,&state.ui,title,R{x:body.x,y:body.y,w:body.w,h:30},state.theme.cyan,FontKind::Big,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    let mut y=body.y+42; for s in lines{text(dc,&state.ui,s,R{x:body.x,y,w:body.w,h:22},state.theme.text,FontKind::MonoSmall,DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS);y+=24;}
+    let input=R{x:body.x,y:body.bottom()-26,w:body.w,h:24}; fill(dc,input,rgb(4,14,18)); stroke(dc,input,if state.terminal_focus{state.theme.green}else{state.theme.border},1,4);
+    text(dc,&state.ui,&format!("blackarch@wsl2 ~ $ {}_",state.command_input),R{x:input.x+7,y:input.y,w:input.w-12,h:input.h},state.theme.green,FontKind::MonoSmall,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS);
+}
+
+unsafe fn draw_postgres_tab(dc:HDC,state:&AppState,body:R){
+    text(dc,&state.ui,"PostgreSQL Permission Audit",R{x:body.x,y:body.y,w:body.w,h:28},state.theme.cyan,FontKind::Big,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    let host=env::var("BLACKARCH_PGHOST").unwrap_or_else(|_|"127.0.0.1".into()); let port=env::var("BLACKARCH_PGPORT").unwrap_or_else(|_|"5432".into()); let db=env::var("BLACKARCH_PGDATABASE").unwrap_or_else(|_|"postgres".into()); let user=env::var("BLACKARCH_PGUSER").unwrap_or_else(|_|"postgres".into());
+    let lines=[format!("Target: {host}:{port} / {db}"),format!("Role:   {user}"),"Auth:   libpq / ~/.pgpass (password is never persisted by this app)".into(),"".into(),"Audit checks:".into(),"  • roles with SUPERUSER / CREATEROLE / CREATEDB / BYPASSRLS".into(),"  • PUBLIC table grants".into(),"  • PUBLIC CREATE on schemas".into(),"".into(),"Click Run Audit in the bottom-right PostgreSQL panel.".into()];
+    let mut y=body.y+38; for s in &lines{text(dc,&state.ui,s,R{x:body.x,y,w:body.w,h:22},state.theme.text,FontKind::MonoSmall,DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS);y+=23;}
+    if !state.case.audit.raw_output.is_empty(){y+=5;text(dc,&state.ui,"Last raw result:",R{x:body.x,y,w:body.w,h:20},state.theme.muted,FontKind::Small,DT_LEFT|DT_SINGLELINE);y+=22;for line_s in state.case.audit.raw_output.lines().take(8){text(dc,&state.ui,line_s,R{x:body.x,y,w:body.w,h:18},state.theme.green,FontKind::MonoSmall,DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS);y+=18;}}
+}
+
+unsafe fn draw_evidence_details(dc:HDC,state:&AppState,r:R){
+    panel(dc,r,state.theme.panel,state.theme.border,6);
+    text(dc,&state.ui,"▣  Evidence Details",R{x:r.x+12,y:r.y+6,w:r.w-60,h:30},state.theme.text,FontKind::Normal,DT_LEFT|DT_VCENTER|DT_SINGLELINE); text(dc,&state.ui,"−   □",R{x:r.right()-58,y:r.y+6,w:47,h:30},state.theme.muted,FontKind::Small,DT_RIGHT|DT_VCENTER|DT_SINGLELINE); line(dc,r.x,r.y+40,r.right(),r.y+40,state.theme.border_soft,1);
+    let Some(ev)=state.current_evidence() else {text(dc,&state.ui,"Drop an evidence file into the window.",R{x:r.x+16,y:r.y+60,w:r.w-32,h:30},state.theme.muted,FontKind::Normal,DT_LEFT|DT_VCENTER|DT_SINGLELINE);return;};
+    draw_file_icon(dc,r.x+29,r.y+77,state.theme.muted); text(dc,&state.ui,&ev.name,R{x:r.x+54,y:r.y+53,w:r.w-160,h:26},state.theme.text,FontKind::Big,DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS); text(dc,&state.ui,&ev.evidence_type,R{x:r.x+54,y:r.y+78,w:r.w-160,h:20},state.theme.muted,FontKind::Small,DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS);
+    let badge=R{x:r.right()-94,y:r.y+58,w:76,h:24}; fill(dc,badge,rgb(4,48,31)); stroke(dc,badge,state.theme.green,1,4); text(dc,&state.ui,if ev.verified{"Verified ✓"}else{"Pending"},badge,if ev.verified{state.theme.green}else{state.theme.yellow},FontKind::Small,DT_CENTER|DT_VCENTER|DT_SINGLELINE); text(dc,&state.ui,if ev.read_only{"Read Only"}else{"Readable"},R{x:r.right()-95,y:r.y+85,w:78,h:18},state.theme.muted,FontKind::Small,DT_RIGHT|DT_SINGLELINE);
+    line(dc,r.x+10,r.y+112,r.right()-10,r.y+112,state.theme.border_soft,1);
+    let path=ev.path.to_string_lossy(); let rows=[("Case ID",state.case.id.clone()),("Location",path.to_string()),("Size",format!("{} ({} bytes)",human_bytes(ev.size_bytes),ev.size_bytes)),("Acquired",ev.acquired.clone()),("Modified",ev.modified.clone()),("Owner","DFIR Team".into()),("Mount Status",if ev.read_only{"Read-only evidence".into()}else{"Not mounted".into()}),("Evidence Type",ev.evidence_type.clone()),("Tags",if ev.tags.is_empty(){"—".into()}else{ev.tags.join(", ")})];
+    let mut y=r.y+124; for (k,v) in &rows {text(dc,&state.ui,k,R{x:r.x+14,y,w:105,h:21},state.theme.muted,FontKind::Small,DT_LEFT|DT_SINGLELINE);text(dc,&state.ui,v,R{x:r.x+122,y,w:r.w-138,h:21},if *k=="Mount Status"{state.theme.green}else if *k=="Tags"{state.theme.blue}else{state.theme.text},FontKind::Small,DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS);y+=21;}
+    let hash_y=r.y+324; line(dc,r.x,hash_y,r.right(),hash_y,state.theme.border_soft,1); text(dc,&state.ui,"▣  Hashes",R{x:r.x+12,y:hash_y+2,w:110,h:30},state.theme.text,FontKind::Normal,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    let verify=R{x:r.right()-94,y:hash_y+5,w:76,h:28}; panel(dc,verify,rgb(4,42,29),state.theme.green,5); text(dc,&state.ui,"Verify ↗",verify,state.theme.green,FontKind::Small,DT_CENTER|DT_VCENTER|DT_SINGLELINE);
+    let hash=ev.sha256.clone().unwrap_or_else(||"Not calculated".into()); text(dc,&state.ui,"SHA256",R{x:r.x+14,y:hash_y+43,w:70,h:20},state.theme.text,FontKind::Small,DT_LEFT|DT_SINGLELINE); text(dc,&state.ui,&hash,R{x:r.x+80,y:hash_y+43,w:r.w-105,h:38},state.theme.text,FontKind::MonoSmall,DT_LEFT|DT_END_ELLIPSIS); if ev.verified{ text(dc,&state.ui,"✓",R{x:r.right()-30,y:hash_y+43,w:18,h:20},state.theme.green,FontKind::Normal,DT_CENTER|DT_SINGLELINE); }
+    let chain_y=hash_y+92; line(dc,r.x,chain_y,r.right(),chain_y,state.theme.border_soft,1); text(dc,&state.ui,"◉  Chain of Custody",R{x:r.x+12,y:chain_y+2,w:180,h:30},state.theme.text,FontKind::Normal,DT_LEFT|DT_VCENTER|DT_SINGLELINE); let mut cy=chain_y+39; for (time,msg) in [("10:32","Acquired from ERPSRV01 (DFIR-INT-01)"),("10:45","Hashes verified (DFIR Analyst)"),("11:02","Mounted read-only (WSL2)"),("11:15","Added to case")]{dot(dc,r.x+19,cy+7,5,state.theme.green); text(dc,&state.ui,time,R{x:r.x+33,y:cy,w:55,h:18},state.theme.muted,FontKind::Small,DT_LEFT|DT_SINGLELINE); text(dc,&state.ui,msg,R{x:r.x+92,y:cy,w:r.w-106,h:18},state.theme.text,FontKind::Small,DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS);cy+=23;}
+}
+
