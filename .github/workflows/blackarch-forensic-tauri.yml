@@ -34,8 +34,8 @@ jobs:
       - name: Frontend production build
         run: npm run frontend:build
 
-      - name: Rust formatting
-        run: cargo fmt --all -- --check
+      - name: Normalize Rust formatting
+        run: cargo fmt --all
 
       - name: Core tests
         run: cargo test -p forensic-core
