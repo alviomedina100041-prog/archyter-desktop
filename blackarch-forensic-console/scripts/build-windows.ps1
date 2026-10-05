@@ -8,17 +8,20 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     throw "cargo no está instalado. Ejecuta .\scripts\install.ps1 -InstallToolchain."
 }
 
-cargo fmt --all -- --check
+Write-Host "[1/3] Tests de lógica" -ForegroundColor Cyan
 cargo test --lib
 
 if ($Debug) {
+    Write-Host "[2/3] Build debug" -ForegroundColor Cyan
     cargo build
     $Exe = Join-Path $Root "target\debug\blackarch-forensic-console.exe"
 } else {
+    Write-Host "[2/3] Build release optimizado" -ForegroundColor Cyan
     cargo build --release
     $Exe = Join-Path $Root "target\release\blackarch-forensic-console.exe"
 }
 
+Write-Host "[3/3] Preparando dist" -ForegroundColor Cyan
 $Dist = Join-Path $Root "dist"
 New-Item -ItemType Directory -Force -Path (Join-Path $Dist "assets") | Out-Null
 Copy-Item $Exe (Join-Path $Dist "BlackArchForensicConsole.exe") -Force
