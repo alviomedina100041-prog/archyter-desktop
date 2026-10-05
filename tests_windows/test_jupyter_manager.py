@@ -23,7 +23,20 @@ class JupyterManagerTests(unittest.TestCase):
                 self.assertTrue(created.exists())
                 self.assertTrue(os.path.samefile(str(created.parent), str(nested)))
                 self.assertEqual(created.suffix, ".ipynb")
-                self.assertIn("/lab/tree/Universidad/notebooks/", manager.open_url(str(created)))
+                self.assertIn(
+                    "/lab/tree/Universidad/notebooks/",
+                    manager.open_url(str(created)),
+                )
+
+                session = manager.ensure_notebook_session(str(created))
+                self.assertEqual(
+                    session.get("path"),
+                    "Universidad/notebooks/" + created.name,
+                )
+                self.assertTrue((session.get("kernel") or {}).get("id"))
+
+                second = manager.ensure_notebook_session(str(created))
+                self.assertEqual(second.get("id"), session.get("id"))
 
                 with self.assertRaises(ValueError):
                     manager.open_url(str(root.parent / "outside.ipynb"))
