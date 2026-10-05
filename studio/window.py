@@ -453,6 +453,11 @@ class StudioWindow(QMainWindow):
             self,
             activated=self._run_cell,
         )
+        QShortcut(
+            QKeySequence("F5"),
+            self,
+            activated=self._reload_everything,
+        )
 
     def _kernel_state_changed(
         self,
