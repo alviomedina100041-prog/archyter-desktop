@@ -9,6 +9,32 @@ from studio.jupyter_manager import JupyterManager
 
 
 class JupyterManagerTests(unittest.TestCase):
+
+    def test_prepare_notebook_metadata_is_local_and_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            notebook = root / "fast.ipynb"
+            notebook.write_text(
+                '{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}',
+                encoding="utf-8",
+            )
+
+            manager = JupyterManager(str(root))
+
+            changed = manager.prepare_notebook_metadata(str(notebook))
+            self.assertTrue(changed)
+
+            payload = __import__("json").loads(
+                notebook.read_text(encoding="utf-8")
+            )
+            kernelspec = payload["metadata"]["kernelspec"]
+
+            self.assertEqual(kernelspec["name"], "python3")
+            self.assertEqual(kernelspec["language"], "python")
+
+            second = manager.prepare_notebook_metadata(str(notebook))
+            self.assertFalse(second)
+
     def test_real_jupyter_creates_nested_notebook(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
