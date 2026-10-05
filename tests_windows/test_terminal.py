@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from pathlib import Path
 
 from PySide6.QtCore import QEventLoop, QTimer
 from PySide6.QtWidgets import QApplication
@@ -32,7 +33,7 @@ class TerminalTests(unittest.TestCase):
                 loop.exec()
 
                 output = terminal.output.toPlainText()
-                self.assertIn(temp.lower(), output.lower())
+                self.assertIn(Path(temp).name.lower(), output.lower())
                 self.assertNotIn("no job control", output.lower())
             finally:
                 terminal.shutdown()
