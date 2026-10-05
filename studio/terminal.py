@@ -97,7 +97,7 @@ class TerminalCard(QFrame):
 
         expand_button = AnimatedToolButton(base_icon=15, hover_icon=17)
         expand_button.setObjectName("FlatAction")
-        expand_button.setIcon(icon("project"))
+        expand_button.setIcon(icon("expand"))
         expand_button.setToolTip("Abrir terminal en una ventana")
         expand_button.clicked.connect(self.expand_requested.emit)
 
