@@ -1,0 +1,23 @@
+[package]
+name = "blackarch-forensic-console"
+version = "0.1.0"
+edition = "2021"
+authors = ["BlackArch Forensic Console contributors"]
+description = "High-performance Windows DFIR console for Arch/BlackArch on WSL2"
+license = "MIT"
+repository = "https://github.com/OWNER/blackarch-forensic-console"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 1
+
+[features]
+default = []
+
+[dependencies]
