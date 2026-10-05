@@ -1,0 +1,12 @@
+/target/
+/dist/
+/reports/
+*.log
+*.tmp
+.env
+.env.*
+!.env.example
+.vscode/
+.idea/
+.DS_Store
+blackarch-forensic-console-error.txt
