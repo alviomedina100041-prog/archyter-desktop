@@ -1,7 +1,5 @@
 PySide6>=6.8
-requests>=2.32
-websocket-client>=1.8
-jupyterlab>=4.2
-notebook>=7.2
+jupyter-client>=8.6
+ipykernel>=6.29
 Send2Trash>=1.8.3
 pyinstaller>=6.11
