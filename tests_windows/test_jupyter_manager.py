@@ -75,6 +75,128 @@ class NativeKernelTests(unittest.TestCase):
             finally:
                 controller.shutdown()
 
+
+    def test_kernel_stop_start_and_execute_again(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            controller = NativeKernelController(temp)
+            states: list[str] = []
+            results: list[tuple] = []
+
+            controller.state_changed.connect(
+                lambda state, _name: states.append(state)
+            )
+            controller.execution_finished.connect(
+                lambda *args: results.append(args)
+            )
+
+            try:
+                controller.start()
+                self.assertTrue(
+                    self._wait_until(lambda: controller.is_running),
+                    "Kernel did not start",
+                )
+
+                controller.stop()
+                self.assertTrue(
+                    self._wait_until(
+                        lambda: (
+                            not controller.is_running
+                            and "dead" in states
+                        ),
+                        timeout=12,
+                    ),
+                    "Kernel did not stop cleanly",
+                )
+
+                controller.start()
+                self.assertTrue(
+                    self._wait_until(lambda: controller.is_running),
+                    "Kernel did not start again after Stop",
+                )
+
+                controller.execute(
+                    "print(6 * 7)",
+                    request_id="after-stop",
+                )
+                self.assertTrue(
+                    self._wait_until(
+                        lambda: any(
+                            row[0] == "after-stop"
+                            for row in results
+                        )
+                    ),
+                    "Kernel could not execute after Stop/Start",
+                )
+
+                row = next(
+                    item
+                    for item in results
+                    if item[0] == "after-stop"
+                )
+                self.assertFalse(row[2])
+                self.assertIn("42", row[1])
+            finally:
+                controller.shutdown()
+
+    def test_interrupt_heavy_process_then_execute_again(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            controller = NativeKernelController(temp)
+            results: list[tuple] = []
+
+            controller.execution_finished.connect(
+                lambda *args: results.append(args)
+            )
+
+            try:
+                controller.start()
+                self.assertTrue(
+                    self._wait_until(lambda: controller.is_running),
+                    "Kernel did not start",
+                )
+
+                controller.execute(
+                    "import time\ntime.sleep(5)\nprint('late')",
+                    request_id="long-job",
+                )
+                time.sleep(0.35)
+                controller.interrupt()
+
+                self.assertTrue(
+                    self._wait_until(
+                        lambda: any(
+                            row[0] == "long-job"
+                            for row in results
+                        ),
+                        timeout=10,
+                    ),
+                    "Interrupted process did not return control",
+                )
+
+                controller.execute(
+                    "print(20 + 22)",
+                    request_id="after-interrupt",
+                )
+                self.assertTrue(
+                    self._wait_until(
+                        lambda: any(
+                            row[0] == "after-interrupt"
+                            for row in results
+                        ),
+                        timeout=10,
+                    ),
+                    "Kernel stayed blocked after interrupt",
+                )
+
+                row = next(
+                    item
+                    for item in results
+                    if item[0] == "after-interrupt"
+                )
+                self.assertFalse(row[2])
+                self.assertIn("42", row[1])
+            finally:
+                controller.shutdown()
+
     def test_real_python_kernel_executes_without_jupyterlab_server(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             controller = NativeKernelController(temp)
