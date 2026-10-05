@@ -72,7 +72,10 @@ class JupyterManager(QObject):
         self.status_changed.emit("iniciando")
         self.process = subprocess.Popen(
             command,
-            cwd=self.root_dir,
+            # The project is passed explicitly to ServerApp.root_dir.
+            # Do not make it the Windows process CWD: Windows can otherwise
+            # keep the project directory locked briefly during shutdown.
+            cwd=None,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
@@ -404,15 +407,39 @@ print("__ARCHYTER_STUDIO_VARS__" + json.dumps(_items))
 
         if process:
             if process.poll() is None:
-                try:
-                    process.terminate()
-                    process.wait(timeout=5)
-                except Exception:
-                    process.kill()
+                if os.name == "nt":
                     try:
+                        subprocess.run(
+                            [
+                                "taskkill",
+                                "/PID",
+                                str(process.pid),
+                                "/T",
+                                "/F",
+                            ],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            check=False,
+                            creationflags=subprocess.CREATE_NO_WINDOW,
+                            timeout=6,
+                        )
                         process.wait(timeout=3)
                     except Exception:
-                        pass
+                        try:
+                            process.kill()
+                            process.wait(timeout=3)
+                        except Exception:
+                            pass
+                else:
+                    try:
+                        process.terminate()
+                        process.wait(timeout=5)
+                    except Exception:
+                        process.kill()
+                        try:
+                            process.wait(timeout=3)
+                        except Exception:
+                            pass
 
             if process.stdout is not None:
                 try:
@@ -425,4 +452,6 @@ print("__ARCHYTER_STUDIO_VARS__" + json.dumps(_items))
         self._reader = None
 
         self.port = None
+        if os.name == "nt":
+            time.sleep(0.2)
         self.status_changed.emit("detenido")
