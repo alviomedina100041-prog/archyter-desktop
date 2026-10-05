@@ -404,3 +404,25 @@ button:disabled { opacity: .45; cursor: default; transform: none !important; }
 .hex-offset { color: #58717b; }
 .hex-bytes { color: #b8d0d6; white-space: pre; }
 .hex-ascii { color: var(--cyan); white-space: pre; }
+
+
+.heading-actions { display: flex; align-items: center; gap: 8px; }
+.mini-button {
+  min-height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #08151a;
+  color: #93aab2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.mini-button:hover:not(:disabled) {
+  background: #0b1d22;
+  border-color: #275561;
+  color: #d9e8eb;
+}
