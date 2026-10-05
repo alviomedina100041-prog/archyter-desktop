@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -11,6 +12,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from PySide6.QtWidgets import QApplication
 
+from studio.native_kernel import NativeKernelController
 from studio.window import StudioWindow
 
 
@@ -21,18 +23,59 @@ def main() -> int:
         root = Path(temp)
         (root / "notebooks").mkdir()
         (root / "data").mkdir()
-        (root / "notebooks" / "90200.ipynb").write_text("{}", encoding="utf-8")
-        (root / "data" / "ventas.csv").write_text("fecha,ventas\n2026-01-01,100\n", encoding="utf-8")
-        (root / "datos.py").write_text("x = 42\n", encoding="utf-8")
 
-        with (
-            patch.object(StudioWindow, "_start_jupyter", lambda self: None),
-            patch.object(StudioWindow, "_start_timers", lambda self: None),
+        notebook = root / "notebooks" / "90200.ipynb"
+        notebook.write_text(
+            json.dumps(
+                {
+                    "cells": [
+                        {
+                            "cell_type": "code",
+                            "execution_count": 1,
+                            "metadata": {},
+                            "outputs": [
+                                {
+                                    "name": "stdout",
+                                    "output_type": "stream",
+                                    "text": "hola mundo\n",
+                                }
+                            ],
+                            "source": ["print('hola mundo')"],
+                        },
+                        {
+                            "cell_type": "code",
+                            "execution_count": None,
+                            "metadata": {},
+                            "outputs": [],
+                            "source": [""],
+                        },
+                    ],
+                    "metadata": {},
+                    "nbformat": 4,
+                    "nbformat_minor": 5,
+                }
+            ),
+            encoding="utf-8",
+        )
+        (root / "data" / "ventas.csv").write_text(
+            "fecha,ventas\n2026-01-01,100\n",
+            encoding="utf-8",
+        )
+        (root / "datos.py").write_text(
+            "x = 42\n",
+            encoding="utf-8",
+        )
+
+        with patch.object(
+            NativeKernelController,
+            "start",
+            lambda self: None,
         ):
             window = StudioWindow(str(root))
 
         window.resize(1480, 900)
         window.show()
+        window._open_file(str(notebook))
         app.processEvents()
 
         output_dir = Path("artifacts")
@@ -41,13 +84,20 @@ def main() -> int:
 
         pixmap = window.grab()
         if pixmap.isNull():
-            raise RuntimeError("Qt no pudo renderizar la ventana de Archyter Studio.")
+            raise RuntimeError(
+                "Qt no pudo renderizar la ventana de Archyter Studio."
+            )
         if pixmap.width() < 1100 or pixmap.height() < 700:
-            raise RuntimeError(f"Render inesperado: {pixmap.width()}x{pixmap.height()}")
+            raise RuntimeError(
+                f"Render inesperado: {pixmap.width()}x{pixmap.height()}"
+            )
         if not pixmap.save(str(output), "PNG"):
-            raise RuntimeError("No se pudo guardar la captura de prueba.")
+            raise RuntimeError(
+                "No se pudo guardar la captura de prueba."
+            )
 
         window.inspector.terminal.shutdown()
+        window.kernel.shutdown()
         window.close()
 
     print(f"UI smoke render: {output}")
