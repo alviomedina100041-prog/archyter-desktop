@@ -401,11 +401,28 @@ print("__ARCHYTER_STUDIO_VARS__" + json.dumps(_items))
     def shutdown(self) -> None:
         process = self.process
         self.process = None
-        if process and process.poll() is None:
-            try:
-                process.terminate()
-                process.wait(timeout=4)
-            except Exception:
-                process.kill()
+
+        if process:
+            if process.poll() is None:
+                try:
+                    process.terminate()
+                    process.wait(timeout=5)
+                except Exception:
+                    process.kill()
+                    try:
+                        process.wait(timeout=3)
+                    except Exception:
+                        pass
+
+            if process.stdout is not None:
+                try:
+                    process.stdout.close()
+                except Exception:
+                    pass
+
+        if self._reader and self._reader.is_alive():
+            self._reader.join(timeout=2)
+        self._reader = None
+
         self.port = None
         self.status_changed.emit("detenido")
