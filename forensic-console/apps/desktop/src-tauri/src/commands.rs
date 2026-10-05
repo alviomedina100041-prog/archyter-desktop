@@ -1,6 +1,6 @@
 use forensic_core::{
-    list_directory, list_forensic_tools, probe_wsl, CaseRecord, CaseRepository, FileEntry,
-    VerificationResult, WslStatus,
+    list_directory, list_forensic_tools, probe_wsl, read_file_chunk, CaseRecord, CaseRepository,
+    FileEntry, HexChunk, VerificationResult, WslStatus,
 };
 use std::path::PathBuf;
 
@@ -38,6 +38,11 @@ pub fn verify_evidence(
 #[tauri::command]
 pub fn list_dir(path: String) -> Result<Vec<FileEntry>, String> {
     list_directory(&PathBuf::from(path)).map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub fn read_hex_chunk(path: String, offset: u64, length: usize) -> Result<HexChunk, String> {
+    read_file_chunk(&PathBuf::from(path), offset, length).map_err(|error| error.to_string())
 }
 
 #[tauri::command]
