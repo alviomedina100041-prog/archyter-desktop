@@ -7,8 +7,15 @@ import time
 from pathlib import Path
 
 from send2trash import send2trash
-from PySide6.QtCore import QSettings, QTimer, Qt, QUrl, Signal
-from PySide6.QtWebEngineCore import QWebEnginePage
+from PySide6.QtCore import (
+    QSettings,
+    QStandardPaths,
+    QTimer,
+    Qt,
+    QUrl,
+    Signal,
+)
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
     QApplication,
@@ -334,7 +341,37 @@ class StudioWindow(QMainWindow):
         layout.addWidget(document)
 
         self.browser = FocusWebEngineView()
-        self.browser.setPage(StudioWebPage(self.browser))
+
+        cache_root = Path(
+            QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.CacheLocation
+            )
+        ) / "webengine"
+        data_root = Path(
+            QStandardPaths.writableLocation(
+                QStandardPaths.StandardLocation.AppLocalDataLocation
+            )
+        ) / "webengine"
+
+        cache_root.mkdir(parents=True, exist_ok=True)
+        data_root.mkdir(parents=True, exist_ok=True)
+
+        self.web_profile = QWebEngineProfile(
+            "ArchyterStudio",
+            self.browser,
+        )
+        self.web_profile.setCachePath(str(cache_root))
+        self.web_profile.setPersistentStoragePath(str(data_root))
+        self.web_profile.setHttpCacheType(
+            QWebEngineProfile.HttpCacheType.DiskHttpCache
+        )
+
+        self.browser.setPage(
+            StudioWebPage(
+                self.web_profile,
+                self.browser,
+            )
+        )
         self.browser.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.browser.setZoomFactor(0.96)
         self.browser.setStyleSheet(
