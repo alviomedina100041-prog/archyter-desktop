@@ -10,7 +10,7 @@ from unittest.mock import patch
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QApplication, QPlainTextEdit, QToolButton
 
-from studio.icons import app_icon, icon
+from studio.icons import ASSET_ROOT, app_icon, icon
 from studio.native_kernel import NativeKernelController
 from studio.native_notebook import MAX_CELL_OUTPUT_CHARS, NativeNotebookEditor
 from studio.window import StudioWindow
@@ -312,6 +312,94 @@ class UiContractTests(unittest.TestCase):
                 )
                 self.assertFalse(
                     window.execution_banner.isVisible()
+                )
+            finally:
+                window._closing = True
+                window.inspector.terminal.shutdown()
+                window.kernel.shutdown()
+                window.close()
+
+
+    def test_open_notebook_can_be_renamed_and_path_updates(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            notebook = root / "before.ipynb"
+            notebook.write_text(
+                '{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}',
+                encoding="utf-8",
+            )
+
+            window = self._window(root)
+            try:
+                window._open_file(str(notebook))
+
+                with patch(
+                    "studio.window.QInputDialog.getText",
+                    return_value=("after.ipynb", True),
+                ):
+                    window._rename_path(str(notebook))
+
+                renamed = root / "after.ipynb"
+                self.assertFalse(notebook.exists())
+                self.assertTrue(renamed.exists())
+                self.assertEqual(
+                    window.active_document,
+                    str(renamed.resolve()),
+                )
+                self.assertEqual(
+                    window.notebook_editor.path,
+                    renamed.resolve(),
+                )
+                self.assertEqual(
+                    window.document_title.text(),
+                    "after.ipynb",
+                )
+            finally:
+                window._closing = True
+                window.inspector.terminal.shutdown()
+                window.kernel.shutdown()
+                window.close()
+
+    def test_asset_logos_and_explicit_reload_controls(self) -> None:
+        self.assertTrue(
+            (ASSET_ROOT / "icon.svg").is_file()
+        )
+        self.assertTrue(
+            (ASSET_ROOT / "python-logo.svg").is_file()
+        )
+        self.assertGreater(
+            visible_pixel_count(icon("app")),
+            18,
+        )
+        self.assertGreater(
+            visible_pixel_count(icon("python")),
+            18,
+        )
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            window = self._window(root)
+
+            try:
+                self.assertEqual(
+                    window.kernel_button.text(),
+                    "Reiniciar kernel",
+                )
+                self.assertEqual(
+                    window.reload_button.text(),
+                    "Recargar todo",
+                )
+                self.assertGreater(
+                    visible_pixel_count(
+                        window.kernel_button.icon()
+                    ),
+                    18,
+                )
+                self.assertGreater(
+                    visible_pixel_count(
+                        window.reload_button.icon()
+                    ),
+                    18,
                 )
             finally:
                 window._closing = True
