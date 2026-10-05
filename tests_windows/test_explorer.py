@@ -31,19 +31,17 @@ class ExplorerTests(unittest.TestCase):
                 panel.set_active_path(str(notebook))
                 self.app.processEvents()
 
-                self.assertEqual(
-                    os.path.abspath(panel.selected_path() or ""),
-                    os.path.abspath(str(notebook)),
-                )
+                selected = panel.selected_path()
+                self.assertIsNotNone(selected)
+                self.assertTrue(os.path.samefile(str(selected), str(notebook)))
                 self.assertTrue(panel.delete_button.isEnabled())
                 self.assertFalse(panel.delete_button.icon().isNull())
 
                 spy = QSignalSpy(panel.delete_requested)
                 panel._delete_selected()
                 self.assertEqual(spy.count(), 1)
-                self.assertEqual(
-                    os.path.abspath(str(spy.at(0)[0])),
-                    os.path.abspath(str(notebook)),
+                self.assertTrue(
+                    os.path.samefile(str(spy.at(0)[0]), str(notebook))
                 )
             finally:
                 panel.close()
