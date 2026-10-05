@@ -1,0 +1,159 @@
+    thread::spawn(move || { post_async(hwnd_bits, AsyncPayload::Hash { index, result: hashing::sha256_file(&path) }); });
+}
+
+unsafe fn start_pg_audit(state: &mut AppState) {
+    let target = postgres::PgTarget {
+        distro: state.distro.clone(),
+        host: env::var("BLACKARCH_PGHOST").unwrap_or_else(|_| "127.0.0.1".into()),
+        port: env::var("BLACKARCH_PGPORT").ok().and_then(|v| v.parse().ok()).unwrap_or(5432),
+        database: env::var("BLACKARCH_PGDATABASE").unwrap_or_else(|_| "postgres".into()),
+        user: env::var("BLACKARCH_PGUSER").unwrap_or_else(|_| "postgres".into()),
+    };
+    state.busy_jobs += 1;
+    state.status = format!("Auditing PostgreSQL {}:{}/{}...", target.host, target.port, target.database);
+    state.push_terminal(format!("[audit] PostgreSQL {}:{}/{} as {}", target.host, target.port, target.database, target.user));
+    let hwnd_bits = state.hwnd as isize;
+    thread::spawn(move || { post_async(hwnd_bits, AsyncPayload::Postgres { result: postgres::audit(&target) }); });
+}
+
+unsafe fn start_project_scan(state: &mut AppState, root: PathBuf) {
+    state.busy_jobs += 1;
+    state.status = format!("Scanning project {}...", root.display());
+    let hwnd_bits = state.hwnd as isize;
+    thread::spawn(move || { let result = project_scan::scan_project(&root); post_async(hwnd_bits, AsyncPayload::Scan { root, result }); });
+}
+
+unsafe fn handle_click(state: &mut AppState, x: i32, y: i32) {
+    if let Some(idx) = sidebar_hit_index(x, y) {
+        state.nav = NavItem::ALL[idx];
+        match state.nav {
+            NavItem::PostgreSql => { state.active_tab = 2; state.terminal_focus = true; }
+            NavItem::Reports => { generate_report_ui(state); }
+            _ => {}
+        }
+        return;
+    }
+    let layout = layout_for(state.hwnd);
+    if y >= layout.center.y && y < layout.center.y + 40 && x >= layout.center.x {
+        let rel = x - layout.center.x - 10;
+        if rel >= 0 {
+            let tab = rel / 116;
+            if tab >= 0 && tab <= 3 { state.active_tab = tab as usize; state.terminal_focus = true; return; }
+        }
+    }
+    if layout.center.contains(x, y) { state.terminal_focus = true; }
+    if (R { x: 10, y: layout.client.h - 330, w: 174, h: 170 }).contains(x, y) {
+        let _ = wsl::open_interactive_terminal(&state.distro);
+        return;
+    }
+    let verify = R { x: layout.right.right() - 94, y: layout.right.y + 334, w: 76, h: 28 };
+    if verify.contains(x, y) { start_hash(state, state.selected_evidence); return; }
+    let hex_h = 134.min(layout.bottom_right.h / 2);
+    let audit_y = layout.bottom_right.y + hex_h + 7;
+    let run_audit = R { x: layout.right.right() - 110, y: audit_y + 6, w: 92, h: 28 };
+    if run_audit.contains(x, y) { start_pg_audit(state); return; }
+    let ev_y = layout.case_explorer.y + 106;
+    if x >= layout.case_explorer.x + 38 && x < layout.case_explorer.right() - 8 && y >= ev_y {
+        let idx = ((y - ev_y) / 25) as usize;
+        if idx < state.case.evidence.len().min(4) { state.selected_evidence = idx; }
+    }
+}
+
+unsafe fn generate_report_ui(state: &mut AppState) {
+    let base = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let reports = base.join("reports");
+    let _ = std::fs::create_dir_all(&reports);
+    let path = reports.join(format!("{}_Report.md", state.case.id));
+    match report::write_markdown(&state.case, &path) {
+        Ok(()) => { state.status = format!("Report written: {}", path.display()); state.push_terminal(format!("[report] {}", path.display())); }
+        Err(e) => { state.status = "Report failed".into(); state.push_terminal(format!("[report error] {e}")); }
+    }
+}
+
+fn sidebar_hit_index(x: i32, y: i32) -> Option<usize> {
+    if x < 0 || x >= 196 || y < 64 { return None; }
+    let idx = ((y - 64) / 48) as usize;
+    (idx < NavItem::ALL.len()).then_some(idx)
+}
+
+struct Layout { client: R, sidebar: R, case_explorer: R, center: R, right: R, bottom_left: R, bottom_center: R, bottom_right: R }
+unsafe fn layout_for(hwnd: HWND) -> Layout {
+    let mut rc = RECT::default(); GetClientRect(hwnd, &mut rc);
+    let w = (rc.right - rc.left).max(1100); let h = (rc.bottom - rc.top).max(700);
+    let top = 50; let side_w = 196; let gap = 8; let case_w = (w as f32 * 0.19).clamp(250.0, 310.0) as i32;
+    let right_w = (w as f32 * 0.285).clamp(360.0, 475.0) as i32;
+    let bottom_h = (h as f32 * 0.285).clamp(220.0, 280.0) as i32;
+    let sidebar = R { x: 0, y: top, w: side_w, h: h-top };
+    let case_explorer = R { x: side_w + gap, y: top + gap, w: case_w, h: h - top - bottom_h - gap*2 };
+    let center_x = case_explorer.right() + gap;
+    let right = R { x: w - right_w - gap, y: top + gap, w: right_w, h: h - top - gap*2 };
+    let center = R { x: center_x, y: top + gap, w: right.x - center_x - gap, h: h - top - bottom_h - gap*2 };
+    let bottom_y = center.bottom() + gap;
+    let lower_h = h - bottom_y - gap;
+    let left_lower_w = ((case_w + center.w) as f32 * 0.49) as i32;
+    let bottom_left = R { x: side_w + gap, y: bottom_y, w: left_lower_w, h: lower_h };
+    let bottom_center = R { x: bottom_left.right() + gap, y: bottom_y, w: right.x - bottom_left.right() - gap*2, h: lower_h };
+    let bottom_right = R { x: right.x, y: bottom_y, w: right.w, h: lower_h };
+    Layout { client: R{x:0,y:0,w,h}, sidebar, case_explorer, center, right, bottom_left, bottom_center, bottom_right }
+}
+
+unsafe fn update_system_stats(state: &mut AppState) {
+    let mut mem = MEMORYSTATUSEX { dwLength: size_of::<MEMORYSTATUSEX>() as u32, dwMemoryLoad:0, ullTotalPhys:0, ullAvailPhys:0, ullTotalPageFile:0, ullAvailPageFile:0, ullTotalVirtual:0, ullAvailVirtual:0, ullAvailExtendedVirtual:0 };
+    if GlobalMemoryStatusEx(&mut mem) != 0 {
+        let total = mem.ullTotalPhys as f64 / 1_073_741_824.0;
+        let used = (mem.ullTotalPhys - mem.ullAvailPhys) as f64 / 1_073_741_824.0;
+        state.stats.memory_total_gb_x10 = (total * 10.0) as u32;
+        state.stats.memory_used_gb_x10 = (used * 10.0) as u32;
+    }
+    let mut idle = FILETIME::default(); let mut kernel = FILETIME::default(); let mut user = FILETIME::default();
+    if GetSystemTimes(&mut idle, &mut kernel, &mut user) != 0 {
+        let i = filetime_u64(idle); let k = filetime_u64(kernel); let u = filetime_u64(user);
+        if state.stats.prev_kernel != 0 {
+            let idle_d = i.saturating_sub(state.stats.prev_idle);
+            let total_d = k.saturating_sub(state.stats.prev_kernel) + u.saturating_sub(state.stats.prev_user);
+            if total_d > 0 { state.stats.cpu_percent = (((total_d.saturating_sub(idle_d)) as f64 / total_d as f64) * 100.0).round() as u32; }
+        }
+        state.stats.prev_idle=i; state.stats.prev_kernel=k; state.stats.prev_user=u;
+    }
+    let root = wide("C:\\"); let mut avail=0u64; let mut total=0u64; let mut free=0u64;
+    if GetDiskFreeSpaceExW(root.as_ptr(), &mut avail, &mut total, &mut free) != 0 && total > 0 {
+        state.stats.disk_used_percent = (((total-free) as f64 / total as f64) * 100.0).round() as u32;
+    }
+}
+
+unsafe fn paint(hwnd: HWND, state: &mut AppState) {
+    let mut ps: PAINTSTRUCT = zeroed();
+    let screen = BeginPaint(hwnd, &mut ps);
+    let layout = layout_for(hwnd);
+    let mem = CreateCompatibleDC(screen);
+    let bmp = CreateCompatibleBitmap(screen, layout.client.w, layout.client.h);
+    let old_bmp = SelectObject(mem, bmp);
+    draw_ui(mem, state, &layout);
+    BitBlt(screen, 0, 0, layout.client.w, layout.client.h, mem, 0, 0, SRCCOPY);
+    SelectObject(mem, old_bmp); DeleteObject(bmp); DeleteDC(mem); EndPaint(hwnd, &ps);
+}
+
+unsafe fn draw_ui(dc: HDC, state: &AppState, l: &Layout) {
+    fill(dc, l.client, state.theme.bg);
+    draw_topbar(dc, state, l);
+    draw_sidebar(dc, state, l);
+    draw_case_explorer(dc, state, l.case_explorer);
+    draw_terminal(dc, state, l.center);
+    draw_evidence_details(dc, state, l.right);
+    draw_findings(dc, state, l.bottom_left);
+    draw_timeline(dc, state, l.bottom_center);
+    draw_right_bottom(dc, state, l.bottom_right);
+    text(dc, &state.ui, &format!("{}{}", if state.busy_jobs>0 { "●  " } else { "" }, state.status), R{x:l.center.x+8,y:l.client.h-20,w:l.center.w-16,h:18}, state.theme.faint, FontKind::Small, DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS);
+}
+
+unsafe fn draw_topbar(dc: HDC, state: &AppState, l: &Layout) {
+    fill(dc, R{x:0,y:0,w:l.client.w,h:50}, rgb(4,13,17));
+    line(dc, 0, 49, l.client.w, 49, state.theme.border_soft, 1);
+    if !state.ui.icon.is_null() { DrawIconEx(dc, 18, 7, state.ui.icon, 34, 34, 0, null_mut(), DI_NORMAL); }
+    else { draw_arch_mark(dc, 34, 25, state.theme.green); }
+    text(dc,&state.ui,"BLACKARCH FORENSIC CONSOLE",R{x:70,y:8,w:410,h:34},state.theme.text,FontKind::Big,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    text(dc,&state.ui,"|  WSL2 DFIR Workspace",R{x:470,y:11,w:230,h:28},state.theme.muted,FontKind::Normal,DT_LEFT|DT_VCENTER|DT_SINGLELINE);
+    let status_w=194; let case_w=190;
+    let status=R{x:l.client.w-status_w-case_w-155,y:10,w:status_w,h:30};
+    panel(dc,status,state.theme.panel,state.theme.border_soft,6);
+    dot(dc,status.x+15,status.y+15,6,if state.wsl_online{state.theme.green}else{state.theme.red});
