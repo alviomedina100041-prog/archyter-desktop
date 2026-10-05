@@ -50,6 +50,12 @@ class StudioWebPage(QWebEnginePage):
         super().javaScriptConsoleMessage(level, message, line_number, source_id)
 
 
+class FocusWebEngineView(QWebEngineView):
+    def mousePressEvent(self, event) -> None:
+        self.setFocus(Qt.FocusReason.MouseFocusReason)
+        super().mousePressEvent(event)
+
+
 class StudioWindow(QMainWindow):
     jupyter_started = Signal(object)
     session_refreshed = Signal(object)
@@ -327,8 +333,9 @@ class StudioWindow(QMainWindow):
 
         layout.addWidget(document)
 
-        self.browser = QWebEngineView()
+        self.browser = FocusWebEngineView()
         self.browser.setPage(StudioWebPage(self.browser))
+        self.browser.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.browser.setZoomFactor(0.96)
         self.browser.setStyleSheet(
             "background:#ffffff;border:none;border-radius:8px;"
@@ -456,9 +463,47 @@ class StudioWindow(QMainWindow):
         if self.browser.url().scheme() not in {"http", "https"}:
             return
         self.manager.inject_shell(self.browser.page())
-        QTimer.singleShot(500, lambda: self.browser.page().runJavaScript(
-            "window.dispatchEvent(new Event('resize'));"
-        ))
+        self._focus_notebook_editor()
+
+        QTimer.singleShot(
+            350,
+            self._focus_notebook_editor,
+        )
+        QTimer.singleShot(
+            900,
+            self._focus_notebook_editor,
+        )
+        QTimer.singleShot(
+            500,
+            lambda: self.browser.page().runJavaScript(
+                "window.dispatchEvent(new Event('resize'));"
+            ),
+        )
+        self.save_status.setText("Listo")
+
+    def _focus_notebook_editor(self) -> None:
+        if not self.active_document:
+            return
+
+        if not self.active_document.lower().endswith(".ipynb"):
+            return
+
+        self.browser.setFocus(
+            Qt.FocusReason.OtherFocusReason
+        )
+        self.browser.page().runJavaScript(
+            """
+            (() => {
+              if (
+                window.__archyterStudio
+                && window.__archyterStudio.focusEditor
+              ) {
+                return window.__archyterStudio.focusEditor();
+              }
+              return false;
+            })();
+            """
+        )
 
     def _refresh_session(self) -> None:
         if not self.active_document:
@@ -590,81 +635,29 @@ class StudioWindow(QMainWindow):
             )
             return
 
-        self._open_request_id += 1
-        request_id = self._open_request_id
-        manager = self.manager
-        target_text = str(target)
+        try:
+            if target.suffix.lower() == ".ipynb":
+                self.manager.prepare_notebook_metadata(str(target))
 
-        self.save_status.setText(
-            "Abriendo notebook…"
-            if target.suffix.lower() == ".ipynb"
-            else "Abriendo archivo…"
-        )
-
-        def worker() -> None:
-            error = None
-            url = None
-
-            try:
-                if target.suffix.lower() == ".ipynb":
-                    manager.ensure_notebook_session(target_text)
-
-                url = manager.open_url(target_text)
-            except Exception as exc:
-                error = str(exc)
-
-            if self._closing:
-                return
-
-            try:
-                self.notebook_opened.emit(
-                    {
-                        "manager": manager,
-                        "request_id": request_id,
-                        "path": target_text,
-                        "url": url,
-                        "error": error,
-                    }
-                )
-            except RuntimeError:
-                pass
-
-        threading.Thread(
-            target=worker,
-            name="archyter-open-document",
-            daemon=True,
-        ).start()
-
-    def _finish_open_file(self, payload: object) -> None:
-        data = dict(payload or {})
-
-        if (
-            data.get("manager") is not self.manager
-            or data.get("request_id") != self._open_request_id
-        ):
-            return
-
-        error = data.get("error")
-        if error:
+            url = self.manager.open_url(str(target))
+        except Exception as exc:
             QMessageBox.warning(
                 self,
                 "Abrir archivo",
-                str(error),
+                str(exc),
             )
             self.save_status.setText("No se pudo abrir")
             return
 
-        path = str(data.get("path") or "")
-        url = str(data.get("url") or "")
+        self._set_active_document(str(target))
+        self.explorer.set_active_path(str(target))
 
-        if not path or not url:
-            self.save_status.setText("No se pudo abrir")
-            return
-
-        self._set_active_document(path)
-        self.explorer.set_active_path(path)
+        # Navigate immediately. JupyterLab starts/attaches the kernel itself
+        # from the kernelspec metadata, so the editor is not held hostage by
+        # a session API round-trip.
         self.browser.setUrl(QUrl(url))
-        self.save_status.setText("Listo")
+        self.browser.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.save_status.setText("Cargando editor…")
 
     def _handle_new(self, kind: str) -> None:
         directory = self.explorer.current_directory()
