@@ -176,7 +176,7 @@ class StudioWindow(QMainWindow):
         layout.addWidget(self.run_button)
 
         self.kernel_button = AnimatedPushButton("Kernel")
-        self.kernel_button.setIcon(icon("refresh"))
+        self.kernel_button.setIcon(icon("kernel"))
         self.kernel_button.setToolTip("Reiniciar el kernel activo")
         self.kernel_button.clicked.connect(self._restart_kernel)
         layout.addWidget(self.kernel_button)
