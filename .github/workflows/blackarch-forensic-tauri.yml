@@ -1,0 +1,47 @@
+name: BlackArch Forensic Tauri CI
+
+on:
+  push:
+    branches: [feature/blackarch-forensic-tauri]
+    paths:
+      - "forensic-console/**"
+      - ".github/workflows/blackarch-forensic-tauri.yml"
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: forensic-console
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install frontend dependencies
+        run: npm install
+
+      - name: Frontend typecheck
+        run: npm run frontend:check
+
+      - name: Frontend production build
+        run: npm run frontend:build
+
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+
+      - name: Core tests
+        run: cargo test -p forensic-core
+
+      - name: Rust clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Tauri backend compile
+        run: cargo check -p blackarch-forensic-desktop
