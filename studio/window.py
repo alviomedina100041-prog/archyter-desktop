@@ -51,6 +51,7 @@ class StudioWindow(QMainWindow):
         self.kernel_state = "starting"
         self.kernel_name = "python3"
         self._closing = False
+        self._responsive_mode: str | None = None
 
         self.setWindowTitle("Archyter Studio")
         self.setWindowIcon(app_icon())
@@ -81,7 +82,7 @@ class StudioWindow(QMainWindow):
         self.splitter.setHandleWidth(3)
 
         self.explorer = ExplorerPanel(self.root_dir)
-        self.explorer.setMinimumWidth(240)
+        self.explorer.setMinimumWidth(205)
         self.explorer.setMaximumWidth(320)
         add_soft_shadow(self.explorer, blur=16, y_offset=2, alpha=18)
         self.explorer.file_open_requested.connect(self._open_file)
@@ -95,7 +96,7 @@ class StudioWindow(QMainWindow):
         self.splitter.addWidget(self._build_editor())
 
         self.inspector = InspectorPanel(self.root_dir)
-        self.inspector.setMinimumWidth(300)
+        self.inspector.setMinimumWidth(255)
         self.inspector.setMaximumWidth(370)
         self.inspector.refresh_variables.connect(self._refresh_variables)
         self.inspector.restart_kernel.connect(self._restart_kernel)
@@ -869,8 +870,50 @@ class StudioWindow(QMainWindow):
             ),
         )
 
+    def _apply_responsive_layout(self) -> None:
+        if not hasattr(self, "splitter"):
+            return
+
+        width = self.width()
+
+        if width < 1260:
+            mode = "compact"
+        elif width < 1500:
+            mode = "medium"
+        else:
+            mode = "wide"
+
+        if mode == self._responsive_mode:
+            return
+
+        self._responsive_mode = mode
+        total = max(720, self.splitter.width())
+
+        if mode == "compact":
+            left = 210
+            right = 265
+        elif mode == "medium":
+            left = 230
+            right = 285
+        else:
+            left = 255
+            right = 320
+
+        center = max(
+            420,
+            total - left - right - 8,
+        )
+        self.splitter.setSizes(
+            [left, center, right]
+        )
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._apply_responsive_layout()
+
     def showEvent(self, event) -> None:
         super().showEvent(event)
+        self._apply_responsive_layout()
         QTimer.singleShot(
             0,
             lambda: apply_light_titlebar(self),
