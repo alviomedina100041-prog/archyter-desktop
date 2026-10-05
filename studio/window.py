@@ -66,7 +66,6 @@ class FocusWebEngineView(QWebEngineView):
 class StudioWindow(QMainWindow):
     jupyter_started = Signal(object)
     session_refreshed = Signal(object)
-    notebook_opened = Signal(object)
     variables_refreshed = Signal(object)
 
     def __init__(self, root_dir: str):
@@ -85,12 +84,10 @@ class StudioWindow(QMainWindow):
         self._jupyter_starting = False
         self._session_refresh_pending = False
         self._variables_refresh_pending = False
-        self._open_request_id = 0
         self._closing = False
 
         self.jupyter_started.connect(self._handle_jupyter_started)
         self.session_refreshed.connect(self._apply_session_snapshot)
-        self.notebook_opened.connect(self._finish_open_file)
         self.variables_refreshed.connect(self._apply_variables_snapshot)
 
         self.setWindowTitle("Archyter Studio")
