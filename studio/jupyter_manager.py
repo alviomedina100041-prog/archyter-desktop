@@ -180,6 +180,71 @@ class JupyterManager(QObject):
         self._relative(created)
         return str(created)
 
+    def prepare_notebook_metadata(self, path: str) -> bool:
+        """Add a Python kernelspec locally when an empty notebook has none.
+
+        This is intentionally file-local and network-free so opening a
+        notebook never has to wait for a kernelspec API request. Existing
+        kernelspec metadata is never overwritten.
+        """
+        target = Path(path).expanduser().resolve()
+        self._relative(target)
+
+        if target.suffix.lower() != ".ipynb":
+            return False
+
+        try:
+            payload = json.loads(
+                target.read_text(
+                    encoding="utf-8",
+                    errors="strict",
+                )
+            )
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return False
+
+        metadata = payload.setdefault("metadata", {})
+        kernelspec = metadata.get("kernelspec") or {}
+
+        if str(kernelspec.get("name") or "").strip():
+            return False
+
+        language_info = metadata.get("language_info") or {}
+        language = str(
+            language_info.get("name") or "python"
+        ).strip().lower()
+
+        # Never rewrite a notebook that already declares another language.
+        if language not in {"", "python", "python3"}:
+            return False
+
+        metadata["kernelspec"] = {
+            "display_name": "Python 3 (ipykernel)",
+            "language": "python",
+            "name": "python3",
+        }
+        metadata.setdefault(
+            "language_info",
+            {
+                "name": "python",
+            },
+        )
+
+        try:
+            target.write_text(
+                json.dumps(
+                    payload,
+                    ensure_ascii=False,
+                    indent=1,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        except OSError:
+            return False
+
+        return True
+
     def kernel_specs(self) -> dict[str, Any]:
         response = self.api_get("/api/kernelspecs")
         response.raise_for_status()
@@ -508,15 +573,48 @@ print("__ARCHYTER_STUDIO_VARS__" + json.dumps(_items))
     target.dispatchEvent(new KeyboardEvent('keydown', {key, code, bubbles:true, cancelable:true, ...extra}));
   }
 
+  function focusEditor() {
+    const selector = [
+      '.jp-Notebook-cell.jp-mod-active .cm-content[contenteditable="true"]',
+      '.jp-Notebook-cell.jp-mod-active .cm-content',
+      '.jp-Notebook-cell .cm-content[contenteditable="true"]',
+      '.jp-Notebook-cell .cm-content'
+    ].join(',');
+
+    const editor = document.querySelector(selector);
+
+    if (editor) {
+      try {
+        editor.focus({preventScroll:true});
+      } catch (_error) {
+        editor.focus();
+      }
+      return document.activeElement === editor;
+    }
+
+    const notebook = document.querySelector('.jp-Notebook');
+    if (notebook) {
+      notebook.setAttribute('tabindex', '0');
+      notebook.focus();
+    }
+
+    return false;
+  }
+
   window.__archyterStudio = {
-    save() { sendKey('s', 'KeyS', {ctrlKey:true}); },
+    save() {
+      sendKey('s', 'KeyS', {ctrlKey:true});
+    },
     runCell() {
-      const notebook=document.querySelector('.jp-Notebook');
-      if (notebook) notebook.focus();
+      focusEditor();
       sendKey('Enter','Enter',{shiftKey:true});
     },
-    dirty() { return !!document.querySelector('.jp-mod-dirty'); }
+    dirty() {
+      return !!document.querySelector('.jp-mod-dirty');
+    },
+    focusEditor
   };
+
   window.dispatchEvent(new Event('resize'));
 })();
 """)
