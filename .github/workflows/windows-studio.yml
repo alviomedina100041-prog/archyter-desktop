@@ -29,6 +29,32 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-windows.txt
 
+      - name: Validate dependency environment
+        shell: pwsh
+        run: python -m pip check
+
+      - name: Validate PowerShell installers
+        shell: pwsh
+        run: |
+          $files = @(
+            "scripts/install_windows.ps1",
+            "scripts/run_studio.ps1",
+            "scripts/uninstall_windows.ps1"
+          )
+          foreach ($file in $files) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path $file),
+              [ref]$tokens,
+              [ref]$errors
+            ) | Out-Null
+            if ($errors.Count -gt 0) {
+              $errors | Format-List | Out-String | Write-Error
+              exit 1
+            }
+          }
+
       - name: Compile sources
         shell: pwsh
         run: python -m compileall -q studio tests_windows
