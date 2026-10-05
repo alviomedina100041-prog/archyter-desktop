@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -152,12 +153,14 @@ class StudioWindow(QMainWindow):
 
         self.save_button = QPushButton("Guardar")
         self.save_button.setIcon(icon("save"))
+        self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self._save)
         layout.addWidget(self.save_button)
 
         self.run_button = QPushButton("Ejecutar")
         self.run_button.setObjectName("Primary")
         self.run_button.setIcon(icon("play", QStyle.StandardPixmap.SP_MediaPlay))
+        self.run_button.setEnabled(False)
         self.run_button.clicked.connect(self._run_cell)
         layout.addWidget(self.run_button)
 
@@ -183,14 +186,14 @@ class StudioWindow(QMainWindow):
         search.setObjectName("IconButton")
         search.setIcon(icon("search"))
         search.setToolTip("Buscar en el proyecto")
-        search.clicked.connect(self._search_placeholder)
+        search.clicked.connect(self._search_project)
         layout.addWidget(search)
 
         settings = QToolButton()
         settings.setObjectName("IconButton")
         settings.setIcon(icon("settings"))
         settings.setToolTip("Configuración de Archyter Studio")
-        settings.clicked.connect(self._settings_placeholder)
+        settings.clicked.connect(self._show_settings)
         layout.addWidget(settings)
 
         return bar
@@ -218,10 +221,16 @@ class StudioWindow(QMainWindow):
             button.setIconSize(button.iconSize() * 1.15)
             button.setToolTip(tooltip)
             button.setProperty("active", active)
-            if name == "search":
-                button.clicked.connect(self._search_placeholder)
+            if name == "home":
+                button.clicked.connect(self._show_welcome)
+            elif name == "search":
+                button.clicked.connect(self._search_project)
+            elif name == "git":
+                button.clicked.connect(self._git_status)
             elif name == "run":
                 button.clicked.connect(self._run_cell)
+            elif name == "grid":
+                button.clicked.connect(self._show_settings)
             layout.addWidget(button)
 
         layout.addStretch(1)
@@ -304,7 +313,7 @@ class StudioWindow(QMainWindow):
         QApplication.processEvents()
         try:
             self.manager.start()
-            self.browser.setUrl(QUrl(self.manager.open_url()))
+            self._show_welcome()
             self.save_status.setText("Listo")
         except Exception as exc:
             self.save_status.setText("Error al iniciar")
@@ -329,6 +338,8 @@ class StudioWindow(QMainWindow):
             return
 
         self._page_retries = 0
+        if self.browser.url().scheme() not in {"http", "https"}:
+            return
         self.manager.inject_shell(self.browser.page())
         QTimer.singleShot(500, lambda: self.browser.page().runJavaScript(
             "window.dispatchEvent(new Event('resize'));"
@@ -378,6 +389,12 @@ class StudioWindow(QMainWindow):
 
     def _set_active_document(self, path: str | None) -> None:
         self.active_document = os.path.abspath(path) if path else None
+        has_document = bool(self.active_document)
+        self.save_button.setEnabled(has_document)
+        self.run_button.setEnabled(
+            bool(self.active_document and self.active_document.lower().endswith(".ipynb"))
+        )
+
         if not self.active_document:
             self.document_title.setText("Inicio")
             self.document_path.setText(Path(self.root_dir).name)
@@ -489,7 +506,7 @@ class StudioWindow(QMainWindow):
             send2trash(str(target))
             if self.active_document and Path(self.active_document).resolve() == target:
                 self._set_active_document(None)
-                self.browser.setUrl(QUrl(self.manager.open_url()))
+                self._show_welcome()
             self.explorer.refresh()
             self.save_status.setText(f"{target.name} enviado a la papelera")
         except Exception as exc:
@@ -575,21 +592,112 @@ class StudioWindow(QMainWindow):
         self._wire_manager()
         self._start_jupyter()
 
+    def _show_welcome(self) -> None:
+        self._set_active_document(None)
+        project_name = Path(self.root_dir).name or self.root_dir
+        safe_path = self.root_dir.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        html = f"""
+        <html>
+        <head>
+          <meta charset="utf-8">
+          <style>
+            html,body{{height:100%;margin:0;background:#fff;font-family:'Segoe UI',Arial,sans-serif;color:#172033}}
+            .wrap{{height:100%;display:flex;align-items:center;justify-content:center}}
+            .card{{width:min(660px,78%);border:1px solid #dbe6f0;border-radius:18px;padding:42px 48px;
+                   box-shadow:0 16px 50px rgba(48,91,130,.08);background:linear-gradient(145deg,#ffffff,#f8fbff)}}
+            .mark{{font-size:48px;font-weight:800;color:#168ed2;line-height:1}}
+            h1{{font-size:30px;margin:12px 0 8px}} p{{color:#64748b;line-height:1.6}}
+            .project{{margin-top:22px;padding:14px 16px;border-radius:10px;background:#eef7ff;color:#17639d;
+                      border:1px solid #d0e8fb;font-weight:600;word-break:break-all}}
+            .hint{{display:flex;gap:12px;margin-top:24px;flex-wrap:wrap}}
+            .pill{{padding:9px 13px;border:1px solid #d8e4ef;border-radius:9px;color:#475569;background:#fff}}
+          </style>
+        </head>
+        <body><div class="wrap"><div class="card">
+          <div class="mark">A</div>
+          <h1>Archyter Studio</h1>
+          <p>Tu espacio de Jupyter para Windows. Crea un notebook o abre uno desde el proyecto.</p>
+          <div class="project">{project_name}<br><span style="font-weight:400;font-size:12px">{safe_path}</span></div>
+          <div class="hint"><div class="pill">＋ Nuevo notebook</div><div class="pill">📁 Proyecto</div><div class="pill">⌨ PowerShell</div></div>
+        </div></div></body></html>
+        """
+        self.browser.setHtml(html)
+        self.save_status.setText("Listo")
+
     def _on_location_changed(self, directory: str) -> None:
         self.project_status.setText(directory)
 
-    def _search_placeholder(self) -> None:
-        QMessageBox.information(
+    def _search_project(self) -> None:
+        term, ok = QInputDialog.getText(
             self,
-            "Buscar",
-            "La búsqueda global será el siguiente módulo de Archyter Studio.",
+            "Buscar en proyecto",
+            "Texto a buscar:",
         )
+        term = term.strip()
+        if not ok or not term:
+            return
 
-    def _settings_placeholder(self) -> None:
+        allowed = {
+            ".py", ".jl", ".md", ".txt", ".csv", ".json",
+            ".yaml", ".yml", ".ipynb", ".toml",
+        }
+        matches: list[Path] = []
+        root = Path(self.root_dir)
+
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            for path in root.rglob("*"):
+                if len(matches) >= 80:
+                    break
+                if not path.is_file() or path.suffix.lower() not in allowed:
+                    continue
+                try:
+                    if path.stat().st_size > 2_000_000:
+                        continue
+                    text = path.read_text(encoding="utf-8", errors="ignore")
+                except OSError:
+                    continue
+                if term.casefold() in text.casefold():
+                    matches.append(path)
+        finally:
+            QApplication.restoreOverrideCursor()
+
+        if not matches:
+            QMessageBox.information(
+                self,
+                "Buscar en proyecto",
+                f"No encontré «{term}» en los archivos de este proyecto.",
+            )
+            return
+
+        labels = [str(path.relative_to(root)) for path in matches]
+        selected, accepted = QInputDialog.getItem(
+            self,
+            "Resultados de búsqueda",
+            f"{len(matches)} archivo(s) con «{term}»:",
+            labels,
+            0,
+            False,
+        )
+        if accepted and selected:
+            self._open_file(str(root / selected))
+
+    def _git_status(self) -> None:
+        self._focus_terminal()
+        self.inspector.terminal.send_command("git status --short --branch")
+
+    def _show_settings(self) -> None:
+        port = self.manager.port if self.manager.port is not None else "detenido"
         QMessageBox.information(
             self,
-            "Configuración",
-            "La configuración avanzada se añadirá después de estabilizar el editor.",
+            "Archyter Studio",
+            (
+                f"Proyecto:\n{self.root_dir}\n\n"
+                f"Python:\n{sys.executable}\n\n"
+                f"Terminal: {self.inspector.terminal.shell_name}\n"
+                f"Jupyter local: {port}\n"
+                "Codificación: UTF-8"
+            ),
         )
 
     def closeEvent(self, event) -> None:
