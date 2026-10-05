@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 from PySide6.QtCore import QEasingCurve, QPropertyAnimation, Qt, Signal
 from PySide6.QtWidgets import (
     QFrame,
+    QGridLayout,
     QHeaderView,
     QHBoxLayout,
     QLabel,
@@ -109,10 +113,34 @@ class InspectorPanel(QFrame):
         identity.addWidget(self.more_button)
         k.addLayout(identity)
 
-        self.kernel_detail = QLabel("Abre un notebook para iniciar.")
-        self.kernel_detail.setObjectName("Muted")
-        self.kernel_detail.setWordWrap(True)
-        k.addWidget(self.kernel_detail)
+        details = QGridLayout()
+        details.setHorizontalSpacing(10)
+        details.setVerticalSpacing(3)
+
+        environment_label = QLabel("Entorno")
+        environment_label.setObjectName("Muted")
+        location_label = QLabel("Ubicación")
+        location_label.setObjectName("Muted")
+        started_label = QLabel("Inicio")
+        started_label.setObjectName("Muted")
+
+        self.environment_value = QLabel(Path(sys.prefix).name or "Python")
+        self.environment_value.setObjectName("Muted")
+        self.location_value = QLabel(sys.prefix)
+        self.location_value.setObjectName("Muted")
+        self.location_value.setToolTip(sys.prefix)
+        self.location_value.setMaximumWidth(190)
+        self.started_value = QLabel("—")
+        self.started_value.setObjectName("Muted")
+
+        details.addWidget(environment_label, 0, 0)
+        details.addWidget(self.environment_value, 0, 1)
+        details.addWidget(location_label, 1, 0)
+        details.addWidget(self.location_value, 1, 1)
+        details.addWidget(started_label, 2, 0)
+        details.addWidget(self.started_value, 2, 1)
+
+        k.addLayout(details)
         layout.addWidget(self.kernel_card)
 
         self.variables_card = QFrame()
@@ -235,7 +263,7 @@ class InspectorPanel(QFrame):
             "detenido": "Detenido",
         }.get(normalized, state or "desconocido")
         self.kernel_badge.setText(f"●  {display}")
-        self.kernel_detail.setText(detail)
+        self.started_value.setText(detail or "—")
 
         has_kernel = normalized not in {
             "sin sesión",
