@@ -1,15 +1,14 @@
 <div align="center">
 
-<img src="assets/icon.svg" alt="Archyter Desktop" width="96">
+<img src="assets/icon.svg" alt="Archyter Desktop" width="92">
 
 # Archyter Desktop
 
-### Jupyter como aplicación de escritorio para Arch Linux
+### Edición principal para Arch Linux
 
-Una interfaz de escritorio ligera construida sobre **PySide6 + Qt WebEngine + JupyterLab**, pensada para trabajar con notebooks sin depender de una ventana normal del navegador.
+**JupyterLab convertido en una experiencia de escritorio propia, ligera y enfocada en productividad.**
 
-[![Python syntax](https://github.com/alviomedina100041-prog/archyter-desktop/actions/workflows/syntax.yml/badge.svg)](https://github.com/alviomedina100041-prog/archyter-desktop/actions/workflows/syntax.yml)
-![Arch Linux](https://img.shields.io/badge/Arch%20Linux-supported-1793D1?logo=archlinux&logoColor=white)
+![Arch Linux](https://img.shields.io/badge/OS-Arch%20Linux-1793D1?logo=archlinux&logoColor=white)
 ![JupyterLab](https://img.shields.io/badge/JupyterLab-embedded-F37626?logo=jupyter&logoColor=white)
 ![PySide6](https://img.shields.io/badge/UI-PySide6-41CD52?logo=qt&logoColor=white)
 ![Python](https://img.shields.io/badge/kernel-Python-3776AB?logo=python&logoColor=white)
@@ -17,189 +16,96 @@ Una interfaz de escritorio ligera construida sobre **PySide6 + Qt WebEngine + Ju
 
 </div>
 
----
+![Archyter Desktop · main](assets/branch-main.svg)
 
-![Archyter Desktop](assets/mockup.svg)
+> **Rama:** `main`  
+> Esta es la edición base de Archyter para **Arch Linux**. Las variantes de Windows y BlackArch viven en ramas separadas para no mezclar interfaces, dependencias ni objetivos.
 
-## ¿Qué es Archyter?
+## ¿Qué es Archyter Desktop?
 
-**Archyter Desktop** toma la parte sólida de Jupyter —servidor, notebooks, kernels, ejecución de celdas, outputs y compatibilidad con el formato `.ipynb`— y la presenta dentro de una aplicación de escritorio para Linux.
+Archyter Desktop conserva el ecosistema real de **Jupyter** —servidor, kernels, notebooks `.ipynb`, ejecución de celdas y outputs— y lo coloca dentro de una aplicación de escritorio creada con **PySide6 + Qt WebEngine**.
 
-No intenta reescribir Jupyter ni crear un formato propietario.
+No utiliza un formato propietario para notebooks. Los archivos creados aquí siguen siendo compatibles con JupyterLab, Jupyter Notebook, VS Code y otras herramientas del ecosistema.
 
-Tus notebooks siguen siendo notebooks normales y pueden abrirse también en:
+La meta de esta rama es ofrecer una experiencia limpia en Linux: abrir el programa, cargar un proyecto y trabajar sin sentir que Jupyter está corriendo dentro de una pestaña normal del navegador.
 
-- JupyterLab
-- Jupyter Notebook
-- VS Code
-- otras instalaciones compatibles con `.ipynb`
+## Diseño de la aplicación
 
-La diferencia está en la experiencia de uso: Archyter elimina la sensación de estar trabajando dentro de Firefox o Chromium y añade una capa de escritorio propia alrededor de Jupyter.
+La interfaz está pensada para mantener el notebook como área principal y mover las herramientas auxiliares a paneles laterales o ventanas emergentes.
 
----
+Incluye:
 
-## Características principales
+- explorador de proyectos y archivos;
+- JupyterLab embebido;
+- estado del kernel;
+- inspector manual de variables;
+- consola y logs;
+- terminal integrada;
+- controles rápidos para guardar, ejecutar y administrar el kernel;
+- tema claro y minimalista;
+- adaptación para pantallas pequeñas.
 
-### Interfaz de escritorio
+### Optimizado para 1366 × 780
 
-- Ventana principal creada con **PySide6 / Qt**.
-- JupyterLab embebido mediante **Qt WebEngine**.
-- Tema blanco y limpio con acentos azul/cian.
-- Explorador de archivos integrado.
-- Barra superior con accesos rápidos:
-  - Nuevo
-  - Guardar
-  - Ejecutar
-  - Kernel
-  - Terminal
-  - Ajustes
-- Barra de estado inferior.
-- Diseño adaptable para pantallas pequeñas.
-
-### Modo compacto 1366 × 780
-
-Archyter detecta automáticamente resoluciones reducidas y activa una interfaz compacta:
+Archyter incluye un modo compacto pensado específicamente para laptops con resoluciones reducidas:
 
 - panel izquierdo más estrecho;
 - panel derecho compacto;
+- controles de menor altura;
+- zoom adaptado en Jupyter;
 - notebook central con prioridad de espacio;
-- controles y tipografías reducidos;
-- Jupyter embebido con zoom adaptado;
-- márgenes y barras más delgados.
+- ventanas emergentes para variables, logs y terminal.
 
-Este modo fue diseñado específicamente para laptops con pantallas alrededor de **1366 × 780**.
+## Kernels
 
-### Kernel y notebooks
-
-Archyter conserva la infraestructura real de Jupyter:
-
-- archivos `.ipynb`;
-- ejecución de celdas;
-- Markdown;
-- outputs HTML;
-- DataFrames;
-- gráficas;
-- kernels instalados en Jupyter.
-
-Se ha probado principalmente con:
+La edición principal se ha trabajado principalmente con:
 
 - **Python / ipykernel**
 - **Julia / IJulia**
 
-Otros kernels visibles para JupyterLab pueden funcionar normalmente, aunque el inspector de variables de Archyter está implementado actualmente para Python y Julia.
-
-### Panel de kernel
-
-El panel derecho muestra información resumida del kernel activo:
-
-- nombre;
-- estado;
-- tiempo de actividad;
-- conexión actual.
-
-Archyter consulta el estado del servidor sin ejecutar código constantemente dentro del kernel.
-
-### Variables
-
-El panel **Variables** permite inspeccionar el estado del kernel bajo demanda.
-
-La actualización es **manual** mediante el botón `↻`, evitando que Archyter cambie continuamente el estado `idle/busy` del kernel.
-
-La vista muestra:
-
-| Campo | Descripción |
-|---|---|
-| Nombre | Variable disponible |
-| Tipo | Tipo de objeto |
-| Forma | Shape o longitud cuando aplica |
-| Valor | Vista previa del contenido |
-
-También puedes pulsar **Variables ↗** para abrir una ventana grande encima de Archyter y revisar la tabla con más espacio.
-
-### Consola / logs
-
-El panel **Consola / logs** muestra información del servidor Jupyter y de Archyter.
-
-Al pulsar **Consola / logs ↗** se abre una ventana grande con los logs en vivo, sin reducir el tamaño del notebook central.
-
-### Terminal integrada
-
-Archyter incluye una terminal local sencilla basada en `QProcess`.
-
-- ejecuta `/bin/bash`;
-- usa el directorio del proyecto como carpeta de trabajo;
-- limpia secuencias ANSI para evitar texto ilegible;
-- puede abrirse en una ventana grande mediante **Terminal ↗**.
-
-> La terminal integrada está pensada para tareas rápidas y no pretende sustituir emuladores completos como Kitty, Alacritty o Konsole.
-
----
+Jupyter puede mostrar otros kernels instalados. El inspector propio de variables está enfocado actualmente en Python y Julia.
 
 ## Arquitectura
 
 ```text
-┌──────────────────────────────────────┐
-│          Archyter Desktop            │
-│          PySide6 / Qt                │
-├───────────────┬──────────────────────┤
-│ Explorador    │   Qt WebEngine       │
-│ Kernel        │         ↓            │
-│ Variables     │    JupyterLab        │
-│ Logs          │         ↓            │
-│ Terminal      │   Jupyter Server     │
-└───────────────┴──────────┬───────────┘
-                           │
-                    Jupyter protocol
-                           │
-              ┌────────────┴───────────┐
-              │                        │
-         Python / ipykernel       Julia / IJulia
+┌────────────────────────────────────────────┐
+│              Archyter Desktop              │
+│                PySide6 / Qt                │
+├────────────────┬───────────────────────────┤
+│ Explorador     │       Qt WebEngine        │
+│ Kernel         │             ↓             │
+│ Variables      │         JupyterLab        │
+│ Logs           │             ↓             │
+│ Terminal       │       Jupyter Server      │
+└────────────────┴──────────────┬────────────┘
+                               │
+                        Jupyter protocol
+                               │
+                  ┌────────────┴────────────┐
+                  │                         │
+             Python / ipykernel        Julia / IJulia
 ```
-
-Jupyter sigue haciendo el trabajo complejo del ecosistema de notebooks. Archyter se encarga principalmente de la experiencia de escritorio, integración visual y utilidades adicionales.
-
----
 
 ## Seguridad local
 
-El servidor Jupyter creado por Archyter:
+El servidor Jupyter iniciado por Archyter:
 
-- escucha únicamente en `127.0.0.1`;
-- usa un puerto local disponible;
-- genera un token nuevo al iniciar;
-- no se publica directamente en la red local.
+- escucha en `127.0.0.1`;
+- utiliza un puerto local disponible;
+- crea un token de sesión;
+- no se publica deliberadamente en la red local.
 
-Esto permite utilizar la arquitectura cliente-servidor de Jupyter sin exponer el servidor innecesariamente.
-
----
-
-# Instalación en Arch Linux
-
-## 1. Clonar el repositorio
+## Instalación en Arch Linux
 
 ```bash
 git clone https://github.com/alviomedina100041-prog/archyter-desktop.git
 cd archyter-desktop
-```
 
-## 2. Ejecutar el instalador
-
-```bash
 chmod +x scripts/install_arch.sh
 ./scripts/install_arch.sh
 ```
 
-El instalador configura automáticamente:
-
-- dependencias necesarias de Arch;
-- entorno virtual privado;
-- dependencias Python;
-- launcher de escritorio;
-- icono de la aplicación;
-- comando `archyter`;
-- compatibilidad conservadora para GPUs Intel antiguas.
-
-La instalación permanente se guarda por defecto en:
+La instalación permanente se guarda normalmente en:
 
 ```text
 ~/.local/share/archyter-desktop
@@ -213,306 +119,27 @@ El launcher se registra en:
 
 Y se crea el comando:
 
-```text
-~/.local/bin/archyter
-```
-
----
-
-## Abrir Archyter
-
-Después de instalarlo puedes buscar:
-
-```text
-Archyter Desktop
-```
-
-en el menú de aplicaciones de tu escritorio.
-
-El launcher utiliza:
-
-```ini
-Terminal=false
-```
-
-por lo que Archyter abre directamente como aplicación gráfica **sin levantar una terminal externa**.
-
-También puedes iniciarlo manualmente con:
-
 ```bash
 archyter
 ```
 
-o durante desarrollo:
+## Ejecución de desarrollo
 
 ```bash
-./scripts/run_archyter.sh
+python -m app.main
 ```
 
----
+La rama `main` debe mantenerse enfocada en la edición Linux/Jupyter. Funciones exclusivas de Windows o DFIR deben permanecer en sus respectivas ramas.
 
-## Actualizar Archyter
 
-La copia instalada es independiente del repositorio clonado.
+## Mapa de ramas
 
-Para actualizar:
-
-```bash
-cd ~/archyter-desktop
-git pull origin main
-./scripts/install_arch.sh
-```
-
-El instalador reemplaza la versión instalada por la versión nueva del repositorio.
-
----
-
-## Desinstalar
-
-Si Archyter ya está instalado:
-
-```bash
-~/.local/share/archyter-desktop/scripts/uninstall_arch.sh
-```
-
-Si todavía estás trabajando desde el clon:
-
-```bash
-./scripts/uninstall_arch.sh
-```
-
-La desinstalación elimina la aplicación instalada, el launcher y el comando de usuario.
-
----
-
-## Intel Haswell, gráficos híbridos y VA-API
-
-Archyter incluye un perfil conservador para equipos con Intel Haswell y sistemas de gráficos híbridos.
-
-El launcher configura:
-
-- Qt OpenGL en modo seguro;
-- Qt Quick con backend de software;
-- Vulkan deshabilitado dentro de Qt WebEngine;
-- GPU compositing/rasterization deshabilitados para Chromium;
-- aceleración de vídeo de Chromium deshabilitada;
-- `LIBVA_DRIVER_NAME=i965` para Intel Haswell y generaciones compatibles.
-
-En Arch Linux, el instalador añade:
-
-```text
-mesa
-libva
-libva-intel-driver
-libva-utils
-```
-
-Puedes verificar VA-API con:
-
-```bash
-LIBVA_DRIVER_NAME=i965 vainfo
-```
-
-En equipos con gráficos híbridos Intel + NVIDIA, es normal que distintas aplicaciones utilicen GPUs diferentes. Archyter prioriza estabilidad antes que aceleración gráfica porque un notebook no necesita una GPU dedicada para renderizar su interfaz.
-
----
-
-## Julia
-
-Julia puede tardar más en la primera ejecución de una sesión debido a la compilación JIT y a la carga inicial de paquetes.
-
-Por ejemplo:
-
-```julia
-using DataFrames
-using CSV
-using Plots
-```
-
-puede sentirse más lento la primera vez. Después de compilar y cargar esos componentes, las ejecuciones posteriores suelen responder mucho más rápido.
-
-Archyter no reemplaza ni modifica ese comportamiento: utiliza el kernel real de Julia mediante Jupyter/IJulia.
-
----
-
-## Estructura del proyecto
-
-```text
-archyter-desktop/
-├── .github/
-│   └── workflows/
-│       └── syntax.yml
-│
-├── app/
-│   ├── __init__.py
-│   ├── main.py
-│   ├── jupyter_manager.py
-│   ├── theme.py
-│   ├── window.py
-│   │
-│   └── widgets/
-│       ├── __init__.py
-│       ├── file_explorer.py
-│       ├── kernel_panel.py
-│       ├── log_console.py
-│       ├── mini_terminal.py
-│       └── variables_panel.py
-│
-├── assets/
-│   ├── icon.svg
-│   └── mockup.svg
-│
-├── scripts/
-│   ├── archyter-desktop.desktop
-│   ├── install_arch.sh
-│   ├── run_archyter.sh
-│   └── uninstall_arch.sh
-│
-├── .gitignore
-├── requirements.txt
-└── README.md
-```
-
----
-
-## Componentes principales
-
-### `app/main.py`
-
-Punto de entrada de la aplicación.
-
-Configura el entorno gráfico antes de importar Qt y arranca la ventana principal.
-
-### `app/window.py`
-
-Contiene la interfaz principal de Archyter:
-
-- layout general;
-- detección de modo compacto;
-- integración de los paneles;
-- ventanas emergentes;
-- comunicación con el gestor de Jupyter.
-
-### `app/jupyter_manager.py`
-
-Gestiona:
-
-- inicio y cierre de JupyterLab;
-- puerto local;
-- token;
-- API de sesiones y kernels;
-- creación de notebooks;
-- reinicio de kernels;
-- inspección manual de variables;
-- personalización visual del Jupyter embebido.
-
-### `app/theme.py`
-
-Define el tema Qt utilizado por Archyter.
-
-### `app/widgets/`
-
-Contiene los componentes independientes de la interfaz:
-
-- explorador de archivos;
-- panel del kernel;
-- variables;
-- logs;
-- terminal.
-
----
-
-## Filosofía del proyecto
-
-Archyter sigue tres ideas principales:
-
-### 1. No reinventar Jupyter
-
-El ecosistema Jupyter ya resuelve kernels, notebooks, protocolos, widgets, outputs y compatibilidad con múltiples lenguajes.
-
-Archyter aprovecha esa infraestructura en vez de reemplazarla.
-
-### 2. Mantener archivos estándar
-
-No existe un formato “Archyter Notebook”.
-
-Tus archivos siguen siendo `.ipynb`.
-
-### 3. Mejorar la experiencia local
-
-Archyter está enfocado en usuarios que trabajan principalmente de forma local y prefieren una aplicación de escritorio sobre una pestaña del navegador.
-
----
-
-## Desarrollo
-
-Para ejecutar directamente desde el repositorio:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-./scripts/run_archyter.sh
-```
-
-Para validar rápidamente la sintaxis:
-
-```bash
-python -m compileall -q app
-```
-
-El repositorio también ejecuta esta validación automáticamente mediante **GitHub Actions** en cada push a `main` y en pull requests.
-
----
-
-## Tecnologías
-
-| Tecnología | Uso |
+| Rama | Propósito |
 |---|---|
-| Python | aplicación principal |
-| PySide6 | interfaz de escritorio |
-| Qt WebEngine | renderizado de JupyterLab |
-| JupyterLab | interfaz y ecosistema notebook |
-| Jupyter Server | servidor local |
-| websocket-client | comunicación con kernels |
-| requests | API local de Jupyter |
-| Bash | instalación y launchers |
-| Arch Linux | plataforma principal |
+| `main` | Edición principal de Archyter Desktop para Arch Linux. |
+| `windows-studio` | Edición de Archyter Studio para Windows 10/11. |
+| `feature/blackarch-forensic-console` | Implementación forense nativa en Rust + Win32/GDI con integración WSL2. |
+| `blackarch-forensic-console` | Prototipo/staging visual en Rust + eframe/egui para el workspace DFIR. |
 
----
+Cada rama mantiene su propio README e imagen para que GitHub muestre claramente qué producto estás viendo.
 
-## Estado actual
-
-Archyter se encuentra en desarrollo activo.
-
-Actualmente ya cuenta con:
-
-- interfaz funcional;
-- notebooks reales;
-- kernels Python y Julia;
-- modo compacto;
-- tema blanco;
-- explorador;
-- panel de kernel;
-- inspector manual de variables;
-- logs;
-- terminal;
-- ventanas emergentes;
-- instalación permanente;
-- launcher gráfico sin consola externa;
-- desinstalador;
-- validación automática mediante GitHub Actions.
-
-Todavía hay espacio para mejorar aspectos como selección visual de kernels, preferencias persistentes, proyectos recientes, empaquetado nativo y mayor integración con el ecosistema de escritorios Linux.
-
----
-
-<div align="center">
-
-### Archyter Desktop
-
-**Jupyter por dentro. Aplicación de escritorio por fuera.**
-
-Hecho para experimentar con una experiencia de notebooks más cómoda en Arch Linux.
-
-</div>
