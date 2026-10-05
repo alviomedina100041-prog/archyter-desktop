@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 
 from send2trash import send2trash
-from PySide6.QtCore import QSettings, QTimer, Qt, QUrl
+from PySide6.QtCore import QSettings, QTimer, Qt, QUrl, Signal
 from PySide6.QtWebEngineCore import QWebEnginePage
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import (
@@ -50,6 +51,11 @@ class StudioWebPage(QWebEnginePage):
 
 
 class StudioWindow(QMainWindow):
+    jupyter_started = Signal(object)
+    session_refreshed = Signal(object)
+    notebook_opened = Signal(object)
+    variables_refreshed = Signal(object)
+
     def __init__(self, root_dir: str):
         super().__init__()
         self.root_dir = str(Path(root_dir).resolve())
@@ -63,6 +69,16 @@ class StudioWindow(QMainWindow):
         self.started_at = time.time()
         self._page_retries = 0
         self._logs: list[str] = []
+        self._jupyter_starting = False
+        self._session_refresh_pending = False
+        self._variables_refresh_pending = False
+        self._open_request_id = 0
+        self._closing = False
+
+        self.jupyter_started.connect(self._handle_jupyter_started)
+        self.session_refreshed.connect(self._apply_session_snapshot)
+        self.notebook_opened.connect(self._finish_open_file)
+        self.variables_refreshed.connect(self._apply_variables_snapshot)
 
         self.setWindowTitle("Archyter Studio")
         self.setWindowIcon(app_icon())
@@ -359,23 +375,73 @@ class StudioWindow(QMainWindow):
         self.kernel_status.setText(f"Jupyter | {state}")
 
     def _start_jupyter(self) -> None:
-        QApplication.processEvents()
-        try:
-            self.manager.start()
+        if self._jupyter_starting:
+            return
+
+        self._jupyter_starting = True
+        self.save_status.setText("Iniciando Jupyter…")
+        manager = self.manager
+
+        def worker() -> None:
+            error = None
+            try:
+                manager.start()
+            except Exception as exc:
+                error = str(exc)
+
+            if self._closing:
+                if error is None:
+                    manager.shutdown()
+                return
+
+            try:
+                self.jupyter_started.emit(
+                    {
+                        "manager": manager,
+                        "error": error,
+                    }
+                )
+            except RuntimeError:
+                pass
+
+        threading.Thread(
+            target=worker,
+            name="archyter-jupyter-start",
+            daemon=True,
+        ).start()
+
+    def _handle_jupyter_started(self, payload: object) -> None:
+        data = dict(payload or {})
+        manager = data.get("manager")
+
+        if manager is not self.manager:
+            return
+
+        self._jupyter_starting = False
+        error = data.get("error")
+
+        if error:
+            self.save_status.setText("Error al iniciar Jupyter")
+            QMessageBox.critical(
+                self,
+                "Archyter Studio",
+                str(error),
+            )
+            return
+
+        if not self.active_document:
             self._show_welcome()
-            self.save_status.setText("Listo")
-        except Exception as exc:
-            self.save_status.setText("Error al iniciar")
-            QMessageBox.critical(self, "Archyter Studio", str(exc))
+
+        self.save_status.setText("Listo")
 
     def _start_timers(self) -> None:
         self.state_timer = QTimer(self)
         self.state_timer.timeout.connect(self._refresh_session)
-        self.state_timer.start(3000)
+        self.state_timer.start(5000)
 
         self.dirty_timer = QTimer(self)
         self.dirty_timer.timeout.connect(self._refresh_dirty_state)
-        self.dirty_timer.start(1400)
+        self.dirty_timer.start(2500)
 
     def _page_loaded(self, ok: bool) -> None:
         if not ok:
@@ -404,14 +470,62 @@ class StudioWindow(QMainWindow):
             )
             return
 
-        try:
-            session = self.manager.active_session(self.active_document)
-        except Exception:
+        if (
+            self._session_refresh_pending
+            or self.manager.port is None
+        ):
             return
+
+        self._session_refresh_pending = True
+        manager = self.manager
+        document = self.active_document
+
+        def worker() -> None:
+            session = None
+            try:
+                session = manager.active_session(document)
+            except Exception:
+                pass
+
+            if self._closing:
+                return
+
+            try:
+                self.session_refreshed.emit(
+                    {
+                        "manager": manager,
+                        "document": document,
+                        "session": session,
+                    }
+                )
+            except RuntimeError:
+                pass
+
+        threading.Thread(
+            target=worker,
+            name="archyter-session-refresh",
+            daemon=True,
+        ).start()
+
+    def _apply_session_snapshot(self, payload: object) -> None:
+        data = dict(payload or {})
+        self._session_refresh_pending = False
+
+        if (
+            data.get("manager") is not self.manager
+            or data.get("document") != self.active_document
+        ):
+            return
+
+        session = data.get("session")
 
         if not session:
             self.active_kernel_id = None
-            self.inspector.update_kernel("Python 3", "sin sesión", "Abre un notebook para iniciar.")
+            self.inspector.update_kernel(
+                "Python 3",
+                "sin sesión",
+                "Abre un notebook para iniciar.",
+            )
             return
 
         kernel = session.get("kernel") or {}
@@ -419,19 +533,15 @@ class StudioWindow(QMainWindow):
         self.active_kernel_name = kernel.get("name") or "python"
         state = kernel.get("execution_state") or "activo"
         minutes = int((time.time() - self.started_at) // 60)
+
         self.inspector.update_kernel(
             self.active_kernel_name,
             state,
             f"Actividad: {minutes} min · Jupyter local",
         )
-        self.kernel_status.setText(f"{self.active_kernel_name} | {state}")
-
-        session_path = session.get("path")
-        if session_path:
-            absolute = str(Path(self.root_dir, session_path).resolve())
-            if os.path.exists(absolute) and absolute != self.active_document:
-                self._set_active_document(absolute)
-                self.explorer.set_active_path(absolute)
+        self.kernel_status.setText(
+            f"{self.active_kernel_name} | {state}"
+        )
 
     def _refresh_dirty_state(self) -> None:
         if not self.active_document:
@@ -472,22 +582,87 @@ class StudioWindow(QMainWindow):
         self.document_path.setToolTip(str(target.parent))
 
     def _open_file(self, path: str) -> None:
-        try:
-            target = Path(path).resolve()
+        target = Path(path).resolve()
 
-            if target.suffix.lower() == ".ipynb":
-                self.save_status.setText("Iniciando kernel…")
-                QApplication.processEvents()
-                self.manager.ensure_notebook_session(str(target))
+        if self.manager.port is None:
+            self.save_status.setText(
+                "Jupyter todavía está iniciando…"
+            )
+            return
 
-            url = self.manager.open_url(str(target))
-        except Exception as exc:
-            QMessageBox.warning(self, "Abrir archivo", str(exc))
+        self._open_request_id += 1
+        request_id = self._open_request_id
+        manager = self.manager
+        target_text = str(target)
+
+        self.save_status.setText(
+            "Abriendo notebook…"
+            if target.suffix.lower() == ".ipynb"
+            else "Abriendo archivo…"
+        )
+
+        def worker() -> None:
+            error = None
+            url = None
+
+            try:
+                if target.suffix.lower() == ".ipynb":
+                    manager.ensure_notebook_session(target_text)
+
+                url = manager.open_url(target_text)
+            except Exception as exc:
+                error = str(exc)
+
+            if self._closing:
+                return
+
+            try:
+                self.notebook_opened.emit(
+                    {
+                        "manager": manager,
+                        "request_id": request_id,
+                        "path": target_text,
+                        "url": url,
+                        "error": error,
+                    }
+                )
+            except RuntimeError:
+                pass
+
+        threading.Thread(
+            target=worker,
+            name="archyter-open-document",
+            daemon=True,
+        ).start()
+
+    def _finish_open_file(self, payload: object) -> None:
+        data = dict(payload or {})
+
+        if (
+            data.get("manager") is not self.manager
+            or data.get("request_id") != self._open_request_id
+        ):
+            return
+
+        error = data.get("error")
+        if error:
+            QMessageBox.warning(
+                self,
+                "Abrir archivo",
+                str(error),
+            )
             self.save_status.setText("No se pudo abrir")
             return
 
-        self._set_active_document(str(target))
-        self.explorer.set_active_path(str(target))
+        path = str(data.get("path") or "")
+        url = str(data.get("url") or "")
+
+        if not path or not url:
+            self.save_status.setText("No se pudo abrir")
+            return
+
+        self._set_active_document(path)
+        self.explorer.set_active_path(path)
         self.browser.setUrl(QUrl(url))
         self.save_status.setText("Listo")
 
@@ -669,15 +844,67 @@ class StudioWindow(QMainWindow):
         if not self.active_kernel_id:
             self.inspector.set_variables([])
             return
-        try:
-            variables = self.manager.variable_snapshot(
-                self.active_kernel_id,
-                self.active_kernel_name,
-            )
-            self.inspector.set_variables(variables)
-        except Exception as exc:
+
+        if self._variables_refresh_pending:
+            return
+
+        self._variables_refresh_pending = True
+        manager = self.manager
+        kernel_id = self.active_kernel_id
+        kernel_name = self.active_kernel_name
+
+        def worker() -> None:
+            variables: list[dict] = []
+            error = None
+
+            try:
+                variables = manager.variable_snapshot(
+                    kernel_id,
+                    kernel_name,
+                )
+            except Exception as exc:
+                error = str(exc)
+
+            if self._closing:
+                return
+
+            try:
+                self.variables_refreshed.emit(
+                    {
+                        "manager": manager,
+                        "kernel_id": kernel_id,
+                        "variables": variables,
+                        "error": error,
+                    }
+                )
+            except RuntimeError:
+                pass
+
+        threading.Thread(
+            target=worker,
+            name="archyter-variable-refresh",
+            daemon=True,
+        ).start()
+
+    def _apply_variables_snapshot(self, payload: object) -> None:
+        data = dict(payload or {})
+        self._variables_refresh_pending = False
+
+        if (
+            data.get("manager") is not self.manager
+            or data.get("kernel_id") != self.active_kernel_id
+        ):
+            return
+
+        error = data.get("error")
+        if error:
+            self._append_log(f"Variables: {error}")
             self.inspector.set_variables([])
-            self._append_log(f"Variables: {exc}")
+            return
+
+        self.inspector.set_variables(
+            list(data.get("variables") or [])
+        )
 
     def _focus_terminal(self) -> None:
         self.inspector.terminal.input.setFocus()
@@ -828,6 +1055,8 @@ class StudioWindow(QMainWindow):
         )
 
     def closeEvent(self, event) -> None:
+        self._closing = True
+
         if hasattr(self, "state_timer"):
             self.state_timer.stop()
         if hasattr(self, "dirty_timer"):
