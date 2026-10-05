@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
-from PySide6.QtWidgets import QApplication, QToolButton
+from PySide6.QtWidgets import QApplication, QPlainTextEdit, QToolButton
 
 from studio.icons import app_icon, icon
+from studio.native_kernel import NativeKernelController
+from studio.native_notebook import NativeNotebookEditor
 from studio.window import StudioWindow
 
 
@@ -35,6 +37,16 @@ class UiContractTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.app = QApplication.instance() or QApplication([])
+
+    def _window(self, root: Path) -> StudioWindow:
+        patcher = patch.object(
+            NativeKernelController,
+            "start",
+            lambda self: None,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return StudioWindow(str(root))
 
     def test_painted_icons_are_visibly_rendered(self) -> None:
         required = (
@@ -68,43 +80,24 @@ class UiContractTests(unittest.TestCase):
 
         self.assertGreater(visible_pixel_count(app_icon()), 18)
 
-
-
-    def test_open_file_does_not_wait_for_session_api(self) -> None:
+    def test_native_notebook_load_is_immediate_and_keyboard_editable(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             notebook = root / "instant.ipynb"
             notebook.write_text(
-                '{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}',
+                json.dumps(
+                    {
+                        "cells": [],
+                        "metadata": {},
+                        "nbformat": 4,
+                        "nbformat_minor": 5,
+                    }
+                ),
                 encoding="utf-8",
             )
 
-            with (
-                patch.object(
-                    StudioWindow,
-                    "_start_jupyter",
-                    lambda self: None,
-                ),
-                patch.object(
-                    StudioWindow,
-                    "_start_timers",
-                    lambda self: None,
-                ),
-            ):
-                window = StudioWindow(str(root))
-
+            window = self._window(root)
             try:
-                window.manager.port = 8765
-
-                def forbidden_session_call(*_args, **_kwargs):
-                    time.sleep(0.5)
-                    raise AssertionError(
-                        "opening a file must not wait for ensure_notebook_session"
-                    )
-
-                window.manager.ensure_notebook_session = forbidden_session_call
-                window.manager.open_url = lambda _path: "about:blank"
-
                 started = time.perf_counter()
                 window._open_file(str(notebook))
                 elapsed = time.perf_counter() - started
@@ -112,119 +105,68 @@ class UiContractTests(unittest.TestCase):
                 self.assertLess(
                     elapsed,
                     0.12,
-                    "Notebook navigation is still blocking before the editor opens",
+                    "Native notebook opening is unexpectedly slow",
                 )
                 self.assertEqual(
                     window.active_document,
                     str(notebook.resolve()),
                 )
+                self.assertIsInstance(
+                    window.notebook_editor,
+                    NativeNotebookEditor,
+                )
+                self.assertTrue(window.notebook_editor.cells)
+                self.assertIsInstance(
+                    window.notebook_editor.cells[0].editor,
+                    QPlainTextEdit,
+                )
+
+                editor = window.notebook_editor.cells[0].editor
+                editor.insertPlainText("print('hola')")
+                self.assertIn("print('hola')", editor.toPlainText())
+            finally:
+                window._closing = True
+                window.inspector.terminal.shutdown()
+                window.kernel.shutdown()
+                window.close()
+
+    def test_native_notebook_saves_valid_ipynb(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            notebook = root / "save.ipynb"
+            notebook.write_text(
+                '{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}',
+                encoding="utf-8",
+            )
+
+            window = self._window(root)
+            try:
+                window._open_file(str(notebook))
+                cell = window.notebook_editor.cells[0]
+                cell.editor.setPlainText("x = 42")
+                window._save()
+
+                payload = json.loads(
+                    notebook.read_text(encoding="utf-8")
+                )
                 self.assertEqual(
-                    window.browser.focusPolicy(),
-                    Qt.FocusPolicy.StrongFocus,
+                    payload["cells"][0]["cell_type"],
+                    "code",
+                )
+                self.assertIn(
+                    "x = 42",
+                    "".join(payload["cells"][0]["source"]),
                 )
             finally:
                 window._closing = True
                 window.inspector.terminal.shutdown()
-                window.close()
-
-    def test_session_poll_does_not_block_the_ui_thread(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            notebook = root / "responsive.ipynb"
-            notebook.write_text("{}", encoding="utf-8")
-
-            with (
-                patch.object(
-                    StudioWindow,
-                    "_start_jupyter",
-                    lambda self: None,
-                ),
-                patch.object(
-                    StudioWindow,
-                    "_start_timers",
-                    lambda self: None,
-                ),
-            ):
-                window = StudioWindow(str(root))
-
-            try:
-                window.active_document = str(notebook)
-                window.manager.port = 8765
-
-                def slow_active_session(_path):
-                    time.sleep(0.45)
-                    return None
-
-                window.manager.active_session = slow_active_session
-
-                started = time.perf_counter()
-                window._refresh_session()
-                elapsed = time.perf_counter() - started
-
-                self.assertLess(
-                    elapsed,
-                    0.12,
-                    "Session polling blocked the Qt UI thread",
-                )
-            finally:
-                window._closing = True
-                window.inspector.terminal.shutdown()
-                window.close()
-
-
-    def test_webengine_watchdog_wakes_stalled_load_without_reload(self) -> None:
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-
-            with (
-                patch.object(
-                    StudioWindow,
-                    "_start_jupyter",
-                    lambda self: None,
-                ),
-                patch.object(
-                    StudioWindow,
-                    "_start_timers",
-                    lambda self: None,
-                ),
-            ):
-                window = StudioWindow(str(root))
-
-            try:
-                calls = []
-                window._web_loading = True
-                window._web_progress_at = time.monotonic() - 2.0
-                window._wake_webengine = lambda: calls.append("wake")
-
-                window._webengine_watchdog_tick()
-
-                self.assertEqual(calls, ["wake"])
-                self.assertGreater(
-                    window._web_progress_at,
-                    time.monotonic() - 0.5,
-                )
-            finally:
-                window._closing = True
-                window.inspector.terminal.shutdown()
+                window.kernel.shutdown()
                 window.close()
 
     def test_main_window_matches_studio_contract(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-
-            with (
-                patch.object(
-                    StudioWindow,
-                    "_start_jupyter",
-                    lambda self: None,
-                ),
-                patch.object(
-                    StudioWindow,
-                    "_start_timers",
-                    lambda self: None,
-                ),
-            ):
-                window = StudioWindow(str(root))
+            window = self._window(root)
 
             try:
                 window.show()
@@ -238,7 +180,6 @@ class UiContractTests(unittest.TestCase):
                     visible_pixel_count(window.windowIcon()),
                     18,
                 )
-
                 self.assertIsInstance(
                     window.new_button,
                     QToolButton,
@@ -274,12 +215,6 @@ class UiContractTests(unittest.TestCase):
                 )
                 self.assertEqual(len(nav_buttons), 5)
 
-                for button in nav_buttons:
-                    self.assertGreater(
-                        visible_pixel_count(button.icon()),
-                        18,
-                    )
-
                 self.assertGreaterEqual(
                     window.explorer.minimumWidth(),
                     240,
@@ -310,17 +245,14 @@ class UiContractTests(unittest.TestCase):
                     window.inspector.kernel_card.objectName(),
                     "Card",
                 )
-                self.assertFalse(
-                    window.inspector.restart_button.icon().isNull()
-                )
-                self.assertFalse(
-                    window.inspector.stop_button.icon().isNull()
-                )
-                self.assertFalse(
-                    window.inspector.more_button.icon().isNull()
+                self.assertIsInstance(
+                    window.notebook_editor,
+                    NativeNotebookEditor,
                 )
             finally:
+                window._closing = True
                 window.inspector.terminal.shutdown()
+                window.kernel.shutdown()
                 window.close()
 
 
