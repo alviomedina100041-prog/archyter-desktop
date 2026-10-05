@@ -34,6 +34,7 @@ import type {
   CaseRecord,
   EvidenceRecord,
   FileEntry,
+  HexChunk,
   WorkspaceModule,
   WslStatus,
 } from "./types";
@@ -78,6 +79,22 @@ function parentPath(path: string): string {
   return parent || trimmed;
 }
 
+function hexRows(chunk: HexChunk | null): Array<{ offset: string; hex: string; ascii: string }> {
+  if (!chunk) return [];
+  const rows: Array<{ offset: string; hex: string; ascii: string }> = [];
+  for (let index = 0; index < chunk.bytes.length; index += 16) {
+    const slice = chunk.bytes.slice(index, index + 16);
+    rows.push({
+      offset: (chunk.offset + index).toString(16).padStart(8, "0"),
+      hex: slice.map((byte) => byte.toString(16).padStart(2, "0")).join(" "),
+      ascii: slice
+        .map((byte) => (byte >= 32 && byte <= 126 ? String.fromCharCode(byte) : "."))
+        .join(""),
+    });
+  }
+  return rows;
+}
+
 export default function App() {
   const [module, setModule] = useState<WorkspaceModule>("dashboard");
   const [cases, setCases] = useState<CaseRecord[]>([]);
@@ -96,6 +113,8 @@ export default function App() {
     () => localStorage.getItem("blackarch.distro") || "archlinux",
   );
   const [draftDistro, setDraftDistro] = useState(distro);
+  const [hexOffset, setHexOffset] = useState(0);
+  const [hexChunk, setHexChunk] = useState<HexChunk | null>(null);
 
   const activeCase = useMemo(
     () => cases.find((item) => item.id === activeCaseId) ?? cases[0],
@@ -168,6 +187,30 @@ export default function App() {
       setActiveEvidenceId(activeCase.evidence[0].id);
     }
   }, [activeCase, activeEvidenceId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!activeEvidence) {
+        setHexChunk(null);
+        return;
+      }
+      try {
+        const chunk = await api.readHexChunk(activeEvidence.path, hexOffset, 256);
+        if (!cancelled) setHexChunk(chunk);
+      } catch {
+        if (!cancelled) setHexChunk(null);
+      }
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeEvidence, hexOffset]);
+
+  useEffect(() => {
+    setHexOffset(0);
+  }, [activeEvidence?.id]);
 
   const createCase = async () => {
     const name = newCaseName.trim();
@@ -568,6 +611,40 @@ export default function App() {
                   <ShieldCheck size={14} />
                   Verify integrity now
                 </button>
+              </div>
+
+              <div className="hex-card">
+                <div className="hex-toolbar">
+                  <div className="hash-title"><Binary size={15} /> Hex preview</div>
+                  <div className="hex-actions">
+                    <button
+                      className="icon-button"
+                      disabled={hexOffset === 0}
+                      title="Previous 256 bytes"
+                      onClick={() => setHexOffset((value) => Math.max(0, value - 256))}
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <button
+                      className="icon-button"
+                      disabled={!hexChunk || hexChunk.eof}
+                      title="Next 256 bytes"
+                      onClick={() => setHexOffset((value) => value + 256)}
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                </div>
+                <div className="hex-grid" aria-label="Paged evidence hex preview">
+                  {hexRows(hexChunk).map((row) => (
+                    <div className="hex-row" key={row.offset}>
+                      <code className="hex-offset">{row.offset}</code>
+                      <code className="hex-bytes">{row.hex}</code>
+                      <code className="hex-ascii">{row.ascii}</code>
+                    </div>
+                  ))}
+                  {!hexChunk && <div className="empty-inline">Hex preview unavailable.</div>}
+                </div>
               </div>
             </div>
           ) : (
