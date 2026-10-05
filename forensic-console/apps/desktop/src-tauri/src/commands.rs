@@ -54,3 +54,12 @@ pub fn probe_wsl_status(distro: String) -> Result<WslStatus, String> {
 pub fn forensic_tools(distro: String) -> Result<Vec<String>, String> {
     list_forensic_tools(&distro).map_err(|error| error.to_string())
 }
+
+
+#[tauri::command]
+pub fn export_case_report(case_id: String) -> Result<String, String> {
+    CaseRepository::default()
+        .export_markdown_report(&case_id)
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|error| error.to_string())
+}
