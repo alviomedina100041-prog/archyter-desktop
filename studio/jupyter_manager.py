@@ -189,6 +189,14 @@ class JupyterManager(QObject):
         response = self.api_post(f"/api/kernels/{kernel_id}/restart")
         response.raise_for_status()
 
+    def shutdown_kernel(self, kernel_id: str) -> None:
+        response = requests.delete(
+            f"{self.base_url}/api/kernels/{kernel_id}?token={self.token}",
+            timeout=8,
+        )
+        if response.status_code not in {204, 404}:
+            response.raise_for_status()
+
     def close_session_for_path(self, path: str) -> None:
         rel = self._relative(path)
         for session in self.sessions():
@@ -345,15 +353,11 @@ print("__ARCHYTER_STUDIO_VARS__" + json.dumps(_items))
       background:#fff !important; border-bottom:1px solid #e3eaf1 !important;
       padding:0 6px !important;
     }
-    .lm-TabBar, .lm-TabBar-content { background:#fff !important; }
-    .lm-TabBar-tab {
-      min-height:31px !important; height:31px !important;
-      background:#fff !important; color:#64748b !important;
-      border-color:#e1e8ef !important;
-    }
-    .lm-TabBar-tab.lm-mod-current {
-      background:#eef7ff !important; color:#075b9b !important;
-      border-top:2px solid #129fe2 !important; font-weight:700 !important;
+    .lm-TabBar,
+    .lm-TabBar-content {
+      display:none !important;
+      min-height:0 !important;
+      height:0 !important;
     }
     .jp-Notebook-cell {
       background:#fff !important;
@@ -372,7 +376,16 @@ print("__ARCHYTER_STUDIO_VARS__" + json.dumps(_items))
     .jp-InputArea-editor, .cm-editor, .cm-scroller, .cm-gutters,
     .jp-OutputArea-output { background:#fff !important; }
     .cm-gutters { border-right:1px solid #eef2f6 !important; color:#94a3b8 !important; }
-    .jp-cell-toolbar, .jp-Cell-toolbar { display:none !important; }
+    .jp-cell-toolbar,
+    .jp-Cell-toolbar,
+    .jp-Notification,
+    .jp-Notification-Toast,
+    .jp-toastContainer,
+    .Toastify,
+    [class*="toast-container"],
+    [class*="notification-toast"] {
+      display:none !important;
+    }
     .jp-ToolbarButtonComponent {
       border-radius:6px !important;
       transition:background 120ms ease !important;
