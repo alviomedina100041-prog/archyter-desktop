@@ -1,145 +1,68 @@
 <div align="center">
 
-<img src="assets/icon.svg" alt="Archyter Desktop" width="92">
+# BlackArch Forensic Console
 
-# Archyter Desktop
+### Functional DFIR workspace · Tauri 2 + Rust + React + xterm.js + WSL2
 
-### Edición principal para Arch Linux
+**This branch replaces the static egui prototype with a real terminal, persistent forensic cases, evidence hashing and a responsive desktop UI.**
 
-**JupyterLab convertido en una experiencia de escritorio propia, ligera y enfocada en productividad.**
-
-![Arch Linux](https://img.shields.io/badge/OS-Arch%20Linux-1793D1?logo=archlinux&logoColor=white)
-![JupyterLab](https://img.shields.io/badge/JupyterLab-embedded-F37626?logo=jupyter&logoColor=white)
-![PySide6](https://img.shields.io/badge/UI-PySide6-41CD52?logo=qt&logoColor=white)
-![Python](https://img.shields.io/badge/kernel-Python-3776AB?logo=python&logoColor=white)
-![Julia](https://img.shields.io/badge/kernel-Julia-9558B2?logo=julia&logoColor=white)
+![Tauri](https://img.shields.io/badge/Desktop-Tauri%202-24C8DB)
+![Rust](https://img.shields.io/badge/Backend-Rust-000000?logo=rust&logoColor=white)
+![React](https://img.shields.io/badge/UI-React%20%2B%20TypeScript-61DAFB?logo=react&logoColor=111)
+![WSL2](https://img.shields.io/badge/Terminal-Arch%2FBlackArch%20WSL2-13ec9a)
+![DFIR](https://img.shields.io/badge/Focus-DFIR-ff5f73)
 
 </div>
 
-![Archyter Desktop · main](assets/branch-main.svg)
+> **Branch:** `feature/blackarch-forensic-tauri`
 
-> **Rama:** `main`  
-> Esta es la edición base de Archyter para **Arch Linux**. Las variantes de Windows y BlackArch viven en ramas separadas para no mezclar interfaces, dependencias ni objetivos.
+## Why this branch exists
 
-## ¿Qué es Archyter Desktop?
+The previous Rust/egui experiment proved the visual direction but behaved like a mockup. This branch changes the architecture around a strict rule: **nothing operational is displayed unless it comes from a real backend operation.**
 
-Archyter Desktop conserva el ecosistema real de **Jupyter** —servidor, kernels, notebooks `.ipynb`, ejecución de celdas y outputs— y lo coloca dentro de una aplicación de escritorio creada con **PySide6 + Qt WebEngine**.
-
-No utiliza un formato propietario para notebooks. Los archivos creados aquí siguen siendo compatibles con JupyterLab, Jupyter Notebook, VS Code y otras herramientas del ecosistema.
-
-La meta de esta rama es ofrecer una experiencia limpia en Linux: abrir el programa, cargar un proyecto y trabajar sin sentir que Jupyter está corriendo dentro de una pestaña normal del navegador.
-
-## Diseño de la aplicación
-
-La interfaz está pensada para mantener el notebook como área principal y mover las herramientas auxiliares a paneles laterales o ventanas emergentes.
-
-Incluye:
-
-- explorador de proyectos y archivos;
-- JupyterLab embebido;
-- estado del kernel;
-- inspector manual de variables;
-- consola y logs;
-- terminal integrada;
-- controles rápidos para guardar, ejecutar y administrar el kernel;
-- tema claro y minimalista;
-- adaptación para pantallas pequeñas.
-
-### Optimizado para 1366 × 780
-
-Archyter incluye un modo compacto pensado específicamente para laptops con resoluciones reducidas:
-
-- panel izquierdo más estrecho;
-- panel derecho compacto;
-- controles de menor altura;
-- zoom adaptado en Jupyter;
-- notebook central con prioridad de espacio;
-- ventanas emergentes para variables, logs y terminal.
-
-## Kernels
-
-La edición principal se ha trabajado principalmente con:
-
-- **Python / ipykernel**
-- **Julia / IJulia**
-
-Jupyter puede mostrar otros kernels instalados. El inspector propio de variables está enfocado actualmente en Python y Julia.
-
-## Arquitectura
+The implementation is a monorepo in:
 
 ```text
-┌────────────────────────────────────────────┐
-│              Archyter Desktop              │
-│                PySide6 / Qt                │
-├────────────────┬───────────────────────────┤
-│ Explorador     │       Qt WebEngine        │
-│ Kernel         │             ↓             │
-│ Variables      │         JupyterLab        │
-│ Logs           │             ↓             │
-│ Terminal       │       Jupyter Server      │
-└────────────────┴──────────────┬────────────┘
-                               │
-                        Jupyter protocol
-                               │
-                  ┌────────────┴────────────┐
-                  │                         │
-             Python / ipykernel        Julia / IJulia
+forensic-console/
 ```
 
-## Seguridad local
+## Working vertical slice
 
-El servidor Jupyter iniciado por Archyter:
+- interactive xterm.js terminal in the center;
+- real Windows PTY through `portable-pty`;
+- terminal process is `wsl.exe -d archlinux ... bash -l`;
+- real stdin/stdout, ANSI colors, cursor and resize;
+- persistent forensic cases;
+- real SHA-256 streaming in Rust;
+- evidence integrity re-verification;
+- persistent chain-of-custody events;
+- real file-system explorer;
+- real BlackArch forensic tool discovery;
+- responsive UI with Lucide icons and non-blocking CSS motion.
 
-- escucha en `127.0.0.1`;
-- utiliza un puerto local disponible;
-- crea un token de sesión;
-- no se publica deliberadamente en la red local.
+No fake hashes, fake findings, fake CPU values or fake evidence files are used.
 
-## Instalación en Arch Linux
+## Run
 
-```bash
-git clone https://github.com/alviomedina100041-prog/archyter-desktop.git
-cd archyter-desktop
+```powershell
+git clone --branch feature/blackarch-forensic-tauri https://github.com/alviomedina100041-prog/archyter-desktop.git
+cd archyter-desktop\forensic-console
 
-chmod +x scripts/install_arch.sh
-./scripts/install_arch.sh
+npm install
+npm run dev
 ```
 
-La instalación permanente se guarda normalmente en:
+For the complete architecture, requirements and current milestone see:
+
+- `forensic-console/README.md`
+- `forensic-console/docs/METHODOLOGY.md`
+
+## Development principle
+
+Features are delivered as vertical slices:
 
 ```text
-~/.local/share/archyter-desktop
+UI → typed Tauri command/event → Rust service → Windows/WSL/filesystem → real result → UI
 ```
 
-El launcher se registra en:
-
-```text
-~/.local/share/applications/archyter-desktop.desktop
-```
-
-Y se crea el comando:
-
-```bash
-archyter
-```
-
-## Ejecución de desarrollo
-
-```bash
-python -m app.main
-```
-
-La rama `main` debe mantenerse enfocada en la edición Linux/Jupyter. Funciones exclusivas de Windows o DFIR deben permanecer en sus respectivas ramas.
-
-
-## Mapa de ramas
-
-| Rama | Propósito |
-|---|---|
-| `main` | Edición principal de Archyter Desktop para Arch Linux. |
-| `windows-studio` | Edición de Archyter Studio para Windows 10/11. |
-| `feature/blackarch-forensic-console` | Implementación forense nativa en Rust + Win32/GDI con integración WSL2. |
-| `blackarch-forensic-console` | Prototipo/staging visual en Rust + eframe/egui para el workspace DFIR. |
-
-Cada rama mantiene su propio README e imagen para que GitHub muestre claramente qué producto estás viendo.
-
+A visible button without an end-to-end implementation is not considered a completed feature.
