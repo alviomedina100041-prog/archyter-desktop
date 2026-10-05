@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QPlainTextEdit, QToolButton
 
 from studio.icons import app_icon, icon
 from studio.native_kernel import NativeKernelController
-from studio.native_notebook import NativeNotebookEditor
+from studio.native_notebook import MAX_CELL_OUTPUT_CHARS, NativeNotebookEditor
 from studio.window import StudioWindow
 
 
@@ -272,6 +272,47 @@ class UiContractTests(unittest.TestCase):
                 self.assertGreater(sizes[1], sizes[0])
                 self.assertGreater(sizes[1], sizes[2])
                 self.assertGreaterEqual(sizes[1], 420)
+            finally:
+                window._closing = True
+                window.inspector.terminal.shutdown()
+                window.kernel.shutdown()
+                window.close()
+
+
+    def test_large_output_is_capped_and_process_banner_exists(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            notebook = root / "memory.ipynb"
+            notebook.write_text(
+                '{"cells":[],"metadata":{},"nbformat":4,"nbformat_minor":5}',
+                encoding="utf-8",
+            )
+
+            window = self._window(root)
+            try:
+                window._open_file(str(notebook))
+                cell = window.notebook_editor.cells[0]
+                cell.set_result(
+                    "x" * (MAX_CELL_OUTPUT_CHARS + 50_000),
+                    False,
+                    1,
+                )
+
+                self.assertLessEqual(
+                    len(cell.output.toPlainText()),
+                    MAX_CELL_OUTPUT_CHARS + 80,
+                )
+                self.assertIn(
+                    "Salida truncada",
+                    cell.output.toPlainText(),
+                )
+                self.assertEqual(
+                    window.execution_banner.objectName(),
+                    "ExecutionBanner",
+                )
+                self.assertFalse(
+                    window.execution_banner.isVisible()
+                )
             finally:
                 window._closing = True
                 window.inspector.terminal.shutdown()
