@@ -12,6 +12,7 @@ fn main() {
             commands::add_evidence,
             commands::verify_evidence,
             commands::list_dir,
+            commands::read_hex_chunk,
             commands::probe_wsl_status,
             commands::forensic_tools,
             terminal::terminal_start,
