@@ -1,14 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
   <defs>
-    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#5A9FD4"/>
+    <linearGradient id="blue" x1="60" y1="24" x2="154" y2="132" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4B8BBE"/>
       <stop offset="1" stop-color="#306998"/>
     </linearGradient>
-    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#FFD43B"/>
-      <stop offset="1" stop-color="#FFE873"/>
+    <linearGradient id="yellow" x1="105" y1="120" x2="196" y2="226" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFE873"/>
+      <stop offset="1" stop-color="#FFD43B"/>
     </linearGradient>
   </defs>
-  <path fill="url(#blue)" d="M126 18c-45 0-42 19-42 19v20h43v6H66s-29-3-29 42 25 44 25 44h15v-22s-1-25 25-25h43s24 0 24-24V42s4-24-43-24zm-24 14a8 8 0 1 1 0 16 8 8 0 0 1 0-16z"/>
-  <path fill="url(#gold)" d="M130 238c45 0 42-19 42-19v-20h-43v-6h61s29 3 29-42-25-44-25-44h-15v22s1 25-25 25h-43s-24 0-24 24v36s-4 24 43 24zm24-14a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/>
+
+  <path fill="url(#blue)" d="M126 18c-46 0-43 20-43 20v21h44v6H64S34 62 34 109s27 46 27 46h16v-23s-2-27 27-27h45s25 0 25-25V43s4-25-48-25zm-25 16a8 8 0 1 1 0 16 8 8 0 0 1 0-16z"/>
+
+  <path fill="url(#yellow)" d="M130 238c46 0 43-20 43-20v-21h-44v-6h63s30 3 30-44-27-46-27-46h-16v23s2 27-27 27h-45s-25 0-25 25v37s-4 25 48 25zm25-16a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/>
+
+  <path d="M83 59h44" stroke="#FFFFFF" stroke-opacity=".18" stroke-width="3" stroke-linecap="round"/>
+  <path d="M129 197h44" stroke="#FFFFFF" stroke-opacity=".28" stroke-width="3" stroke-linecap="round"/>
 </svg>
