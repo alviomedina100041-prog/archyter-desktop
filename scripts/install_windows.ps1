@@ -49,12 +49,14 @@ $Launcher = Join-Path $InstallDir "ArchyterStudio.cmd"
 @"
 @echo off
 cd /d "$InstallDir"
-"$InstallDir\.venv\Scripts\pythonw.exe" -m studio.main %*
+"$InstallDir\.venv\Scripts\python.exe" -m studio.main %*
 "@ | Set-Content -Encoding ASCII $Launcher
 
+$Pythonw = Join-Path $InstallDir ".venv\Scripts\pythonw.exe"
 $WshShell = New-Object -ComObject WScript.Shell
 $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
-$Shortcut.TargetPath = $Launcher
+$Shortcut.TargetPath = $Pythonw
+$Shortcut.Arguments = "-m studio.main"
 $Shortcut.WorkingDirectory = $InstallDir
 $Shortcut.Description = "Archyter Studio - Jupyter Desktop IDE"
 $Shortcut.WindowStyle = 1
