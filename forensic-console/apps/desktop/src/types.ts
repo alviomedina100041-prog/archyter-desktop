@@ -40,6 +40,12 @@ export interface FileEntry {
   size: number;
 }
 
+export interface HexChunk {
+  offset: number;
+  bytes: number[];
+  eof: boolean;
+}
+
 export interface WslStatus {
   online: boolean;
   distro: string;
