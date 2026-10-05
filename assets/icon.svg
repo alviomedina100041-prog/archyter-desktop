@@ -1,23 +1,31 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
   <defs>
-    <linearGradient id="bg" x1="28" y1="18" x2="226" y2="238" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#18A8EE"/>
-      <stop offset="0.58" stop-color="#1687DF"/>
-      <stop offset="1" stop-color="#3158C7"/>
+    <linearGradient id="bg" x1="30" y1="20" x2="226" y2="236" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E1B2B"/>
+      <stop offset="0.55" stop-color="#123D69"/>
+      <stop offset="1" stop-color="#176FC1"/>
     </linearGradient>
-    <linearGradient id="glass" x1="78" y1="58" x2="178" y2="202" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#FFFFFF" stop-opacity=".98"/>
-      <stop offset="1" stop-color="#EAF6FF" stop-opacity=".9"/>
+    <linearGradient id="cyan" x1="70" y1="58" x2="184" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#78E6FF"/>
+      <stop offset="0.45" stop-color="#32C7F4"/>
+      <stop offset="1" stop-color="#149FE2"/>
     </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#08111D" flood-opacity=".35"/>
+    </filter>
   </defs>
 
   <rect x="18" y="18" width="220" height="220" rx="54" fill="url(#bg)"/>
-  <rect x="34" y="34" width="188" height="188" rx="42" fill="#FFFFFF" fill-opacity=".08"/>
+  <rect x="31" y="31" width="194" height="194" rx="44" fill="none" stroke="#9EEBFF" stroke-opacity=".16" stroke-width="2"/>
 
-  <path d="M72 172L115 73c5-12 21-12 26 0l43 99h-31l-10-25H104l-10 25H72zm42-51h20l-10-27-10 27z" fill="url(#glass)"/>
+  <g filter="url(#shadow)">
+    <path d="M77 182L113 78c4-12 25-12 30 0l36 104h-32l-8-27h-39l-9 27H77zm34-54h21l-10-33-11 33z" fill="url(#cyan)"/>
+    <path d="M82 188h96" stroke="#D7F6FF" stroke-width="10" stroke-linecap="round"/>
+  </g>
 
-  <path d="M58 190h140" stroke="#D8F1FF" stroke-width="12" stroke-linecap="round"/>
-  <path d="M78 55l-16 16 16 16M178 55l16 16-16 16" fill="none" stroke="#CFEFFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M68 68L54 82l14 14" fill="none" stroke="#A8EFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M188 68l14 14-14 14" fill="none" stroke="#A8EFFF" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
 
-  <circle cx="197" cy="57" r="9" fill="#8CE7FF"/>
+  <circle cx="192" cy="188" r="10" fill="#66E2FF"/>
+  <circle cx="192" cy="188" r="4" fill="#0E1B2B"/>
 </svg>
