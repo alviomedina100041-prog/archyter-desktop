@@ -22,6 +22,7 @@ class NativeKernelController(QObject):
         self._manager: KernelManager | None = None
         self._client = None
         self._lock = threading.RLock()
+        self._ready = threading.Event()
         self._starting = False
         self._closing = False
 
@@ -34,6 +35,7 @@ class NativeKernelController(QObject):
             return
 
         self._starting = True
+        self._ready.clear()
         self.state_changed.emit("starting", self.kernel_name)
 
         def worker() -> None:
@@ -54,6 +56,7 @@ class NativeKernelController(QObject):
                 with self._lock:
                     self._manager = manager
                     self._client = client
+                    self._ready.set()
 
                 self.state_changed.emit("idle", self.kernel_name)
             except Exception as exc:
@@ -73,15 +76,17 @@ class NativeKernelController(QObject):
 
         if not self.is_running:
             self.start()
-            self.execution_finished.emit(
-                request_id,
-                "El kernel todavía está iniciando. Ejecuta de nuevo en un momento.",
-                True,
-                0,
-            )
-            return request_id
 
         def worker() -> None:
+            if not self._ready.wait(timeout=30):
+                self.execution_finished.emit(
+                    request_id,
+                    "El kernel no quedó listo dentro de 30 segundos.",
+                    True,
+                    0,
+                )
+                return
+
             with self._lock:
                 client = self._client
                 if client is None:
@@ -153,8 +158,7 @@ class NativeKernelController(QObject):
 
     def refresh_variables(self) -> None:
         if not self.is_running:
-            self.variables_ready.emit([])
-            return
+            self.start()
 
         marker = "__ARCHYTER_NATIVE_VARS__"
         code = r'''
@@ -187,6 +191,10 @@ print("__ARCHYTER_NATIVE_VARS__" + json.dumps(_arch_items))
 '''
 
         def worker() -> None:
+            if not self._ready.wait(timeout=30):
+                self.variables_ready.emit([])
+                return
+
             with self._lock:
                 client = self._client
                 if client is None:
@@ -247,6 +255,7 @@ print("__ARCHYTER_NATIVE_VARS__" + json.dumps(_arch_items))
                     self._client = self._manager.blocking_client()
                     self._client.start_channels()
                     self._client.wait_for_ready(timeout=30)
+                    self._ready.set()
                     self.state_changed.emit("idle", self.kernel_name)
                 except Exception as exc:
                     self.error.emit(str(exc))
@@ -260,6 +269,7 @@ print("__ARCHYTER_NATIVE_VARS__" + json.dumps(_arch_items))
 
     def shutdown(self) -> None:
         self._closing = True
+        self._ready.clear()
         with self._lock:
             try:
                 if self._client:
