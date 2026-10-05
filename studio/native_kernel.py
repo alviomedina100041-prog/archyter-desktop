@@ -162,32 +162,78 @@ class NativeKernelController(QObject):
 
         marker = "__ARCHYTER_NATIVE_VARS__"
         code = r'''
-import json
-_arch_skip = {"In", "Out", "exit", "quit", "get_ipython"}
+import json as _arch_json
+import types as _arch_types
+
+_arch_skip = {
+    "In",
+    "Out",
+    "exit",
+    "quit",
+    "get_ipython",
+    "open",
+}
+
 _arch_items = []
+
 for _arch_name, _arch_value in list(globals().items()):
-    if _arch_name.startswith("_") or _arch_name in _arch_skip:
+    if (
+        _arch_name.startswith("_")
+        or _arch_name in _arch_skip
+        or isinstance(_arch_value, _arch_types.ModuleType)
+        or callable(_arch_value)
+    ):
         continue
+
     try:
         _arch_type = type(_arch_value).__name__
+
         if hasattr(_arch_value, "shape"):
-            _arch_shape = str(getattr(_arch_value, "shape"))
-        elif isinstance(_arch_value, (dict, list, tuple, set, str, bytes)):
-            _arch_shape = f"len={len(_arch_value)}"
+            _arch_shape = str(
+                getattr(_arch_value, "shape")
+            )
+        elif isinstance(
+            _arch_value,
+            (
+                dict,
+                list,
+                tuple,
+                set,
+                str,
+                bytes,
+            ),
+        ):
+            _arch_shape = (
+                f"len={len(_arch_value)}"
+            )
         else:
             _arch_shape = "-"
-        _arch_preview = repr(_arch_value).replace("\n", " ")
+
+        _arch_preview = repr(
+            _arch_value
+        ).replace("\n", " ")
+
         if len(_arch_preview) > 90:
-            _arch_preview = _arch_preview[:87] + "..."
-        _arch_items.append({
-            "name": _arch_name,
-            "type": _arch_type,
-            "shape": _arch_shape,
-            "value": _arch_preview,
-        })
+            _arch_preview = (
+                _arch_preview[:87]
+                + "..."
+            )
+
+        _arch_items.append(
+            {
+                "name": _arch_name,
+                "type": _arch_type,
+                "shape": _arch_shape,
+                "value": _arch_preview,
+            }
+        )
     except Exception:
         pass
-print("__ARCHYTER_NATIVE_VARS__" + json.dumps(_arch_items))
+
+print(
+    "__ARCHYTER_NATIVE_VARS__"
+    + _arch_json.dumps(_arch_items)
+)
 '''
 
         def worker() -> None:
