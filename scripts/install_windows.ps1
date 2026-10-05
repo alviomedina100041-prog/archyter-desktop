@@ -23,6 +23,7 @@ if (Test-Path $Staging) { Remove-Item $Staging -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $Staging | Out-Null
 
 Copy-Item (Join-Path $SourceDir "studio") $Staging -Recurse
+Copy-Item (Join-Path $SourceDir "assets") $Staging -Recurse
 Copy-Item (Join-Path $SourceDir "scripts") $Staging -Recurse
 Copy-Item (Join-Path $SourceDir "requirements-windows.txt") $Staging
 Copy-Item (Join-Path $SourceDir "README.md") $Staging -ErrorAction SilentlyContinue
