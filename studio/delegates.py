@@ -19,6 +19,16 @@ class CleanProjectTree(QTreeView):
     """
 
     def drawBranches(self, painter: QPainter, rect: QRect, index) -> None:
+        # Always repaint the complete indentation gutter. Returning early
+        # without clearing this rectangle lets the native Windows style leave
+        # stale selection/focus pixels behind; that is the square artifact
+        # seen beside selected files.
+        painter.save()
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor("#fbfdff"))
+        painter.drawRect(rect)
+        painter.restore()
+
         model = self.model()
         if model is None or not index.isValid():
             return
@@ -46,11 +56,31 @@ class CleanProjectTree(QTreeView):
         center_y = rect.center().y()
 
         if self.isExpanded(index):
-            painter.drawLine(center_x - 4, center_y - 2, center_x, center_y + 2)
-            painter.drawLine(center_x, center_y + 2, center_x + 4, center_y - 2)
+            painter.drawLine(
+                center_x - 4,
+                center_y - 2,
+                center_x,
+                center_y + 2,
+            )
+            painter.drawLine(
+                center_x,
+                center_y + 2,
+                center_x + 4,
+                center_y - 2,
+            )
         else:
-            painter.drawLine(center_x - 2, center_y - 4, center_x + 2, center_y)
-            painter.drawLine(center_x + 2, center_y, center_x - 2, center_y + 4)
+            painter.drawLine(
+                center_x - 2,
+                center_y - 4,
+                center_x + 2,
+                center_y,
+            )
+            painter.drawLine(
+                center_x + 2,
+                center_y,
+                center_x - 2,
+                center_y + 4,
+            )
 
         painter.restore()
 
