@@ -19,6 +19,46 @@ class ExplorerTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.app = QApplication.instance() or QApplication([])
 
+
+    def test_rename_action_emits_selected_path(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            notebook = root / "old_name.ipynb"
+            notebook.write_text("{}", encoding="utf-8")
+
+            panel = ExplorerPanel(str(root))
+            panel.show()
+            self.app.processEvents()
+
+            try:
+                panel.set_active_path(str(notebook))
+                self.app.processEvents()
+
+                self.assertTrue(
+                    panel.rename_button.isEnabled()
+                )
+                self.assertFalse(
+                    panel.rename_button.icon().isNull()
+                )
+
+                spy = QSignalSpy(
+                    panel.rename_requested
+                )
+                panel._rename_selected()
+
+                self.assertEqual(
+                    spy.count(),
+                    1,
+                )
+                self.assertTrue(
+                    os.path.samefile(
+                        str(spy.at(0)[0]),
+                        str(notebook),
+                    )
+                )
+            finally:
+                panel.close()
+
     def test_selection_icons_and_delete_signal(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
