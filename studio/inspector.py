@@ -259,21 +259,38 @@ class InspectorPanel(QFrame):
             "starting": "Iniciando",
             "stopping": "Deteniendo",
             "interrupting": "Interrumpiendo",
+            "dead": "Detenido",
             "sin sesión": "Sin sesión",
             "detenido": "Detenido",
         }.get(normalized, state or "desconocido")
         self.kernel_badge.setText(f"●  {display}")
         self.started_value.setText(detail or "—")
 
-        has_kernel = normalized not in {
+        can_restart = normalized not in {
+            "starting",
+            "stopping",
+        }
+        can_stop = normalized in {
+            "idle",
+            "busy",
+            "interrupting",
+        }
+        has_details = normalized not in {
             "sin sesión",
             "detenido",
             "dead",
             "desconocido",
         }
-        self.restart_button.setEnabled(has_kernel)
-        self.stop_button.setEnabled(has_kernel)
-        self.more_button.setEnabled(has_kernel)
+
+        self.restart_button.setEnabled(
+            can_restart
+        )
+        self.stop_button.setEnabled(
+            can_stop
+        )
+        self.more_button.setEnabled(
+            has_details
+        )
 
     def set_variables(self, variables: list[dict]) -> None:
         self.variables = [dict(item) for item in variables]
