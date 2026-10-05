@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -20,7 +21,7 @@ class JupyterManagerTests(unittest.TestCase):
                 created = Path(manager.create_notebook(str(nested)))
 
                 self.assertTrue(created.exists())
-                self.assertEqual(created.parent, nested)
+                self.assertTrue(os.path.samefile(str(created.parent), str(nested)))
                 self.assertEqual(created.suffix, ".ipynb")
                 self.assertIn("/lab/tree/Universidad/notebooks/", manager.open_url(str(created)))
 
