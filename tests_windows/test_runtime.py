@@ -1,25 +1,29 @@
 from __future__ import annotations
 
-import os
+import inspect
 import unittest
 
-import studio.main  # noqa: F401
+import studio.window as studio_window
 
 
 class WindowsRuntimeTests(unittest.TestCase):
-    def test_chromium_occlusion_throttling_is_disabled(self) -> None:
-        if os.name != "nt":
-            self.skipTest("Windows-only runtime policy")
+    def test_studio_window_has_no_webengine_runtime(self) -> None:
+        source = inspect.getsource(studio_window)
 
-        flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
+        forbidden = (
+            "QWebEngineView",
+            "QWebEnginePage",
+            "QWebEngineProfile",
+            "QtWebEngine",
+            "runJavaScript",
+        )
 
-        for required in (
-            "--disable-features=CalculateNativeWinOcclusion",
-            "--disable-backgrounding-occluded-windows",
-            "--disable-renderer-backgrounding",
-            "--disable-background-timer-throttling",
-        ):
-            self.assertIn(required, flags)
+        for token in forbidden:
+            self.assertNotIn(
+                token,
+                source,
+                f"WebEngine dependency returned to Studio window: {token}",
+            )
 
 
 if __name__ == "__main__":
