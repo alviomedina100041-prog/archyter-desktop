@@ -8,6 +8,7 @@ from pathlib import Path
 
 from send2trash import send2trash
 from PySide6.QtCore import (
+    QEvent,
     QSettings,
     QStandardPaths,
     QTimer,
@@ -51,6 +52,7 @@ class StudioWebPage(QWebEnginePage):
         ignored = (
             "No active debugger session",
             "ResizeObserver loop",
+            "Blocked attempt to show a 'beforeunload' confirmation panel",
         )
         if any(fragment in message for fragment in ignored):
             return
@@ -84,6 +86,9 @@ class StudioWindow(QMainWindow):
         self._jupyter_starting = False
         self._session_refresh_pending = False
         self._variables_refresh_pending = False
+        self._web_loading = False
+        self._web_load_progress = 0
+        self._web_progress_at = 0.0
         self._closing = False
 
         self.jupyter_started.connect(self._handle_jupyter_started)
@@ -374,6 +379,8 @@ class StudioWindow(QMainWindow):
         self.browser.setStyleSheet(
             "background:#ffffff;border:none;border-radius:8px;"
         )
+        self.browser.loadStarted.connect(self._web_load_started)
+        self.browser.loadProgress.connect(self._web_load_progressed)
         self.browser.loadFinished.connect(self._page_loaded)
         layout.addWidget(self.browser, 1)
 
@@ -484,7 +491,88 @@ class StudioWindow(QMainWindow):
         self.dirty_timer.timeout.connect(self._refresh_dirty_state)
         self.dirty_timer.start(2500)
 
+        self.web_watchdog = QTimer(self)
+        self.web_watchdog.timeout.connect(self._webengine_watchdog_tick)
+        self.web_watchdog.start(400)
+
+    def _web_load_started(self) -> None:
+        self._web_loading = True
+        self._web_load_progress = 0
+        self._web_progress_at = time.monotonic()
+        self._wake_webengine()
+
+    def _web_load_progressed(self, progress: int) -> None:
+        progress = int(progress)
+        if progress != self._web_load_progress:
+            self._web_load_progress = progress
+            self._web_progress_at = time.monotonic()
+
+        if self.active_document:
+            self.save_status.setText(
+                f"Cargando editor… {progress}%"
+            )
+
+    def _wake_webengine(self) -> None:
+        if not hasattr(self, "browser"):
+            return
+
+        try:
+            page = self.browser.page()
+
+            if hasattr(page, "setVisible"):
+                page.setVisible(True)
+
+            lifecycle = getattr(
+                QWebEnginePage,
+                "LifecycleState",
+                None,
+            )
+            if lifecycle is not None and hasattr(
+                page,
+                "setLifecycleState",
+            ):
+                page.setLifecycleState(
+                    lifecycle.Active
+                )
+        except Exception:
+            pass
+
+        try:
+            self.browser.setUpdatesEnabled(True)
+            self.browser.update()
+            self.browser.viewport().update()
+        except Exception:
+            pass
+
+        try:
+            url = self.browser.url()
+            if url.scheme() in {"http", "https"}:
+                self.browser.page().runJavaScript(
+                    "window.dispatchEvent(new Event('resize'));"
+                )
+        except Exception:
+            pass
+
+    def _webengine_watchdog_tick(self) -> None:
+        if self._closing or not self._web_loading:
+            return
+
+        stalled_for = time.monotonic() - self._web_progress_at
+
+        if stalled_for < 0.9:
+            return
+
+        # This replaces the user's manual minimize/restore workaround.
+        # QtWebEngine/Chromium can stop presenting frames on Windows when its
+        # native occlusion state gets out of sync. Reasserting visibility and
+        # lifecycle wakes the renderer without reloading the notebook.
+        self._wake_webengine()
+        self._web_progress_at = time.monotonic()
+
     def _page_loaded(self, ok: bool) -> None:
+        self._web_loading = False
+        self._web_load_progress = 100 if ok else self._web_load_progress
+
         if not ok:
             if self._page_retries < 2:
                 self._page_retries += 1
@@ -689,8 +777,10 @@ class StudioWindow(QMainWindow):
         # Navigate immediately. JupyterLab starts/attaches the kernel itself
         # from the kernelspec metadata, so the editor is not held hostage by
         # a session API round-trip.
+        self._wake_webengine()
         self.browser.setUrl(QUrl(url))
         self.browser.setFocus(Qt.FocusReason.OtherFocusReason)
+        self._wake_webengine()
         self.save_status.setText("Cargando editor…")
 
     def _handle_new(self, kind: str) -> None:
@@ -856,6 +946,16 @@ class StudioWindow(QMainWindow):
     def showEvent(self, event) -> None:
         super().showEvent(event)
         QTimer.singleShot(0, lambda: apply_light_titlebar(self))
+        QTimer.singleShot(0, self._wake_webengine)
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+
+        if event.type() in {
+            QEvent.Type.WindowStateChange,
+            QEvent.Type.ActivationChange,
+        }:
+            QTimer.singleShot(0, self._wake_webengine)
 
     def _restart_kernel(self) -> None:
         if not self.active_kernel_id:
@@ -1088,6 +1188,8 @@ class StudioWindow(QMainWindow):
             self.state_timer.stop()
         if hasattr(self, "dirty_timer"):
             self.dirty_timer.stop()
+        if hasattr(self, "web_watchdog"):
+            self.web_watchdog.stop()
         if hasattr(self, "inspector"):
             self.inspector.terminal.shutdown()
         self.manager.shutdown()
