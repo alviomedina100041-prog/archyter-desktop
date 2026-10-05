@@ -5,9 +5,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from PySide6.QtGui import QColor
 from PySide6.QtTest import QSignalSpy
 from PySide6.QtWidgets import QApplication
 
+from studio.delegates import CleanProjectTree, CleanTreeDelegate
 from studio.explorer import ExplorerPanel
 
 
@@ -36,6 +38,46 @@ class ExplorerTests(unittest.TestCase):
                 self.assertTrue(os.path.samefile(str(selected), str(notebook)))
                 self.assertTrue(panel.delete_button.isEnabled())
                 self.assertFalse(panel.delete_button.icon().isNull())
+                self.assertIsInstance(panel.tree, CleanProjectTree)
+                self.assertIsInstance(panel.tree.itemDelegate(), CleanTreeDelegate)
+
+                index = panel.model.index(str(notebook))
+                rect = panel.tree.visualRect(index)
+                grab = panel.tree.viewport().grab().toImage()
+                suspicious = 0
+                y0 = max(0, rect.top())
+                y1 = min(grab.height(), rect.bottom() + 1)
+                x1 = min(grab.width(), max(48, rect.left()))
+
+                for y in range(y0, y1):
+                    for x in range(0, x1):
+                        color = QColor.fromRgba(grab.pixel(x, y))
+                        is_dark = (
+                            color.red() < 45
+                            and color.green() < 45
+                            and color.blue() < 45
+                            and color.alpha() > 220
+                        )
+                        is_red_block = (
+                            color.red() > 145
+                            and color.green() < 90
+                            and color.blue() < 100
+                            and color.alpha() > 220
+                        )
+                        is_blue_block = (
+                            color.blue() > 135
+                            and color.red() < 90
+                            and color.green() < 150
+                            and color.alpha() > 220
+                        )
+                        if is_dark or is_red_block or is_blue_block:
+                            suspicious += 1
+
+                self.assertLess(
+                    suspicious,
+                    160,
+                    "Explorer branch gutter contains a solid color block",
+                )
 
                 spy = QSignalSpy(panel.delete_requested)
                 panel._delete_selected()
