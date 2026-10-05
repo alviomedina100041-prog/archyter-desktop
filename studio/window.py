@@ -306,6 +306,7 @@ class StudioWindow(QMainWindow):
             Qt.AlignmentFlag.AlignRight
             | Qt.AlignmentFlag.AlignVCenter
         )
+        self.document_path.hide()
         row.addWidget(self.document_path)
 
         layout.addWidget(document)
@@ -472,14 +473,23 @@ class StudioWindow(QMainWindow):
 
     def _open_file(self, path: str) -> None:
         try:
-            url = self.manager.open_url(path)
+            target = Path(path).resolve()
+
+            if target.suffix.lower() == ".ipynb":
+                self.save_status.setText("Iniciando kernel…")
+                QApplication.processEvents()
+                self.manager.ensure_notebook_session(str(target))
+
+            url = self.manager.open_url(str(target))
         except Exception as exc:
             QMessageBox.warning(self, "Abrir archivo", str(exc))
+            self.save_status.setText("No se pudo abrir")
             return
 
-        self._set_active_document(path)
-        self.explorer.set_active_path(path)
+        self._set_active_document(str(target))
+        self.explorer.set_active_path(str(target))
         self.browser.setUrl(QUrl(url))
+        self.save_status.setText("Listo")
 
     def _handle_new(self, kind: str) -> None:
         directory = self.explorer.current_directory()
