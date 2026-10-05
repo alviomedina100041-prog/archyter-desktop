@@ -210,6 +210,10 @@ class InspectorPanel(QFrame):
         self._variables_animation.setEasingCurve(
             QEasingCurve.Type.OutCubic
         )
+        self._variables_target_visible = True
+        self._variables_animation.finished.connect(
+            self._finish_variables_animation
+        )
 
         layout.addWidget(self.variables_card, 1)
 
@@ -223,34 +227,28 @@ class InspectorPanel(QFrame):
     def _toggle_variables(self) -> None:
         self._variables_animation.stop()
 
-        if self.table.isVisible() and self.table.maximumHeight() > 0:
+        collapsing = (
+            self.table.isVisible()
+            and self.table.maximumHeight() > 0
+        )
+        self._variables_target_visible = not collapsing
+
+        if collapsing:
             self._variables_animation.setStartValue(
                 max(1, self.table.height())
             )
             self._variables_animation.setEndValue(0)
+        else:
+            self.table.show()
+            self.table.setMaximumHeight(0)
+            self._variables_animation.setStartValue(0)
+            self._variables_animation.setEndValue(250)
 
-            def hide_after() -> None:
-                if self.table.maximumHeight() == 0:
-                    self.table.hide()
-
-            try:
-                self._variables_animation.finished.disconnect()
-            except (RuntimeError, TypeError):
-                pass
-            self._variables_animation.finished.connect(hide_after)
-            self._variables_animation.start()
-            return
-
-        try:
-            self._variables_animation.finished.disconnect()
-        except (RuntimeError, TypeError):
-            pass
-
-        self.table.show()
-        self.table.setMaximumHeight(0)
-        self._variables_animation.setStartValue(0)
-        self._variables_animation.setEndValue(250)
         self._variables_animation.start()
+
+    def _finish_variables_animation(self) -> None:
+        if not self._variables_target_visible:
+            self.table.hide()
 
     def update_kernel(self, name: str, state: str, detail: str) -> None:
         self.kernel_name.setText(name or "Python 3")
@@ -259,6 +257,8 @@ class InspectorPanel(QFrame):
             "idle": "Activo",
             "busy": "Ejecutando",
             "starting": "Iniciando",
+            "stopping": "Deteniendo",
+            "interrupting": "Interrumpiendo",
             "sin sesión": "Sin sesión",
             "detenido": "Detenido",
         }.get(normalized, state or "desconocido")
